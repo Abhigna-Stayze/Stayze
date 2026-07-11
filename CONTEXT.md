@@ -45,7 +45,8 @@ src/
   lib/db.ts     Prisma client instance — import from here
   generated/    Prisma client — generated, gitignored
 prisma/
-  schema.prisma Data model
+  schema.prisma Data model — Schema v1.1, 21 models
+  migrations/   Migration history — committed, replayable
 public/
   brand/        Logo, wordmark, favicon and badge SVGs
 ```
@@ -118,16 +119,23 @@ Verified end to end against the live Supabase database: read, write and delete a
 
 `prisma.config.ts` already points `migrations.path` at `prisma/migrations/` and routes migrations through `DIRECT_URL` — PgBouncer, on the pooled `DATABASE_URL`, cannot run the statements migrations need. The plumbing is done; the only thing required is to stop reaching for `db push`.
 
-The first migration has **not been created yet**. `prisma/schema.prisma` now holds the real Schema v1.1 (21 models — `Stay`, `Owner`, `BookingRequest`, `Review`, `TravelGuide`, …) and passes `prisma validate`, but the database still carries the placeholder `User` table that `db push` created during setup. Because that table has no migration behind it, the first `migrate dev` will report **schema drift** and demand a reset. Do it deliberately instead:
+**The first migration is done** (`a361f15`, 2026-07-11). `prisma/migrations/20260711174828_init/` is the baseline: all 21 models of Schema v1.1 and all 11 enums, 502 lines of SQL. The database was reset first — it carried a placeholder `User` table from `db push` with no migration behind it, which would have shown up as schema drift:
 
 ```bash
-npx prisma migrate reset --force --skip-seed   # drops the placeholder User table
-npx prisma migrate dev --name init             # writes prisma/migrations/ and applies it
+npx prisma migrate reset --force     # dropped the placeholder User table
+npx prisma migrate dev --name init   # wrote prisma/migrations/ and applied it
 ```
 
-Safe today — the database holds one empty placeholder table and no rows. **`migrate reset` is destructive and development-only.** Never run it once real bookings exist.
+Verified afterwards against the live database, not just from CLI output: all 21 tables exist and are empty, `_prisma_migrations` has the one `init` row. `migrate dev` regenerates the client as a side effect, so no separate `generate` was needed.
 
-Commit `prisma/migrations/` alongside `schema.prisma`. From that point, every schema change is `migrate dev`.
+**Two Prisma 7 surprises, both of which will bite you again:**
+
+- **`--skip-seed` no longer exists.** Seeding moved into `prisma.config.ts`. Passing the flag makes the command print its help text and do nothing — easy to misread as a failure. No seed script is configured here, so nothing seeds either way.
+- **`migrate reset` is blocked for AI agents.** Prisma refuses it and prints a notice demanding explicit human consent, then requires the command be re-run with `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION` set to the exact text of the user's approving message. This is a Prisma guardrail, not a Claude Code one. Expect any agent to stop and ask here — that is working as intended.
+
+**`migrate reset` is destructive and development-only.** It was safe on 2026-07-11 because the database held no rows. It will not be safe again once real bookings exist. From here, every schema change is `migrate dev`, and `prisma/migrations/` is committed with `schema.prisma`.
+
+Supabase's own schemas (`auth`, `storage`, `realtime`, `vault`) sit outside `public` and the reset left them untouched.
 
 #### The `.env` gotcha
 
@@ -175,7 +183,8 @@ The pooled/direct split is a Supabase requirement, not a preference: PgBouncer i
 
 Real, and worth handling before building on top of this:
 
-- **The first migration has not been run.** See "Migrations" above — the database is still on the placeholder `User` table while `schema.prisma` holds Schema v1.1. Do this before anything else.
+- **Storage buckets do not exist yet.** The schema stores media as `bucket` + `path`, but the five buckets (`stays`, `owners`, `reviews`, `guides`, `experiences`) have not been created in Supabase Storage, and no upload path exists. Create them before wiring any media. Consider a private, signed-URL bucket for `reviews`, since guests upload personal photos there.
+- **Nothing deletes storage objects.** Deleting a row cascades to its child rows, but never to the file in the bucket. Delete the object and the row together, or the buckets accumulate orphaned files.
 - **Schema v1.1 cuts scope the Developer Handoff lists as in-MVP.** Confirm with Ashwin before building around it, because §22 of that document makes it the contract:
   - **There is no `User` model — no auth, no accounts.** So `/login`, `/signup`, `/account`, `/account/saved` (wishlist collections) and `/admin` have no data model behind them, yet §19 lists all of them as MVP. The trip timeline sidesteps this: a guest returns via the `BookingRequest.reference` code rather than logging in. Wishlist collections and the admin back-office (§9, "not skippable") cannot be built on v1.1 as written.
   - **No standalone `Experience` model.** `StayExperience` is scoped to a single stay, so `/experiences` and `/experiences/[slug]` (§6.5) are unsupported.
@@ -209,11 +218,13 @@ Repo: `Abhigna-Stayze/Stayze` — private, default branch `main`.
 - Never commit `.env*` — no exceptions, not even an example file.
 - Spec documents (`.docx`, `.pdf`, `.pptx`) stay in the parent workspace, never in this repo.
 - Regenerate the Prisma client after any schema change (`migrate dev` does this for you).
+- **Update this file in the same commit as the change it describes.** A stale `CONTEXT.md` is the one failure mode that makes every other convention here useless. If a step is now done, say it is done; if a command no longer works, fix the command.
+- **Commits carry no AI attribution.** No `Co-Authored-By` trailers, no "Generated with" badges, no mention of Claude in a commit message. Authored as the commit identity above, and nothing else. `.claude/settings.json` sets `includeCoAuthoredBy: false` to enforce this locally; that file is gitignored, so re-create it on a fresh clone.
 
 ## State
 
-Scaffold, a **working** database connection, and Schema v1.1 written but **not yet migrated**.
+Scaffold, a **working** database connection, and **Schema v1.1 migrated and live**.
 
-`src/lib/db.ts` queries the live Supabase Postgres instance — verified with a read, a write and a delete. `prisma/schema.prisma` holds the real 21-model Schema v1.1 and passes `prisma validate`, but the database still has the placeholder `User` table from setup; the first migration is the immediate next step (see "Migrations").
+`src/lib/db.ts` queries the live Supabase Postgres instance — verified with a read, a write and a delete. `prisma/schema.prisma` holds the real 21-model Schema v1.1, and `prisma/migrations/20260711174828_init/` has been applied: all 21 tables exist in the database, all empty. CI is green on `main`.
 
-What does not exist yet: any application code that touches the client, auth, an admin surface, and any real content. One placeholder route, and nothing between it and the schema.
+What does not exist yet: any application code that touches the client, the Supabase Storage buckets, auth, an admin surface, and any real content. One placeholder route, and nothing between it and the schema. The natural next steps are creating the storage buckets and seeding a first `Stay` end to end.
