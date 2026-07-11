@@ -33,16 +33,12 @@ src/
   app/          App Router routes, layouts and global styles
 public/
   brand/        Logo, wordmark, favicon and badge SVGs
-docs/
-  SETUP.md      How this project was set up, and why
 ```
 
 The `@/*` path alias maps to `src/*`.
 
 ## Context
 
-- [CONTEXT.md](CONTEXT.md) — the business baseline: brand, model, operations, decisions, open items. Read it first.
-- [AGENTS.md](AGENTS.md) — working rules for anyone (or any agent) touching this project.
-- [docs/SETUP.md](docs/SETUP.md) — setup decisions, commit identity, current state.
+[CONTEXT.md](CONTEXT.md) covers how the project is set up, the commit identity this repo expects, and the current state.
 
-`CONTEXT.md` and `AGENTS.md` are copies of the files in the parent workspace folder, which remains their source of truth. Keep them in sync.
+Business context — brand, model, operations, open items — lives in the parent workspace folder, not in this repo.
