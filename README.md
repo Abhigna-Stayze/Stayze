@@ -11,15 +11,14 @@ Customer portal for Stayze. Next.js (App Router), TypeScript, Tailwind CSS, Pris
 ## Getting started
 
 ```bash
-npm install
+npm install               # postinstall generates the Prisma client
 cp .env.example .env      # then fill in the two connection strings
-npx prisma generate       # generates the client into src/generated/prisma
 npm run dev
 ```
 
 The app runs at http://localhost:3000.
 
-`npx prisma generate` is required after a fresh clone: the generated client is written to `src/generated/prisma`, which is gitignored rather than committed.
+The Prisma client is generated into `src/generated/prisma`, which is gitignored rather than committed — `postinstall` regenerates it on every `npm install`.
 
 ## Environment
 
@@ -27,8 +26,8 @@ Two variables, both from Supabase (Project Settings → Database → Connection 
 
 | Variable       | Port | Purpose                                                    |
 | -------------- | ---- | ---------------------------------------------------------- |
-| `DATABASE_URL` | 6543 | Pooled connection (PgBouncer). Used by the app at runtime.  |
-| `DIRECT_URL`   | 5432 | Direct, unpooled connection. Migrations require this.       |
+| `DATABASE_URL` | 6543 | Pooled connection (PgBouncer). Used by the app at runtime. |
+| `DIRECT_URL`   | 5432 | Direct, unpooled connection. Migrations require this.      |
 
 `.env` is gitignored. Never commit it.
 
@@ -58,13 +57,19 @@ That module wires the client to the pooled connection through `@prisma/adapter-p
 
 ## Scripts
 
-| Script              | Description                       |
-| ------------------- | --------------------------------- |
-| `npm run dev`       | Start the development server      |
-| `npm run build`     | Create a production build         |
-| `npm run start`     | Serve the production build        |
-| `npm run lint`      | Run ESLint                        |
-| `npm run typecheck` | Type-check without emitting files |
+| Script                 | Description                       |
+| ---------------------- | --------------------------------- |
+| `npm run dev`          | Start the development server      |
+| `npm run build`        | Create a production build         |
+| `npm run start`        | Serve the production build        |
+| `npm run lint`         | Run ESLint                        |
+| `npm run typecheck`    | Type-check without emitting files |
+| `npm run format`       | Format with Prettier              |
+| `npm run format:check` | Check formatting without writing  |
+
+`postinstall` runs `prisma generate` automatically, so the client is always present after `npm install`.
+
+CI (`.github/workflows/ci.yml`) runs format-check, lint, typecheck and build on every push to `main` and every pull request.
 
 ## Project structure
 

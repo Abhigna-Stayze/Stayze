@@ -9,6 +9,6 @@ export default defineConfig({
   },
   datasource: {
     // Migrate requires a direct, unpooled connection string
-    url: process.env["DIRECT_URL"], 
+    url: process.env["DIRECT_URL"],
   },
 });
