@@ -1,0 +1,7 @@
+<svg width="110" height="84" viewBox="0 0 110 84" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Stayze logo - stacked lockup, ink on light</title>
+<path d="M 5 32 L 27 12 L 49 32" fill="none" stroke="#3D2B1F" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5 32 L 5 44 L 49 44 L 49 32" fill="none" stroke="#3D2B1F" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 21 44 L 21 28 L 33 28 L 33 44" fill="none" stroke="#B5651D" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="27" y="68" font-family="Fraunces, Georgia, serif" font-size="22" font-weight="600" fill="#3D2B1F" text-anchor="middle" letter-spacing="-0.3">stay<tspan fill="#B5651D">z</tspan>e</text>
+</svg>

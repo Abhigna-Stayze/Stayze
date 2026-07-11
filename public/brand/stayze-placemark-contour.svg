@@ -1,0 +1,8 @@
+<svg width="260" height="160" viewBox="0 0 260 160" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Stayze contour place-mark, full opacity reference version</title>
+<path d="M 0 90 Q 50 70 80 86 Q 120 106 160 78 Q 200 50 260 64" fill="none" stroke="#5B7553" stroke-width="3"/>
+<path d="M 0 112 Q 55 96 90 108 Q 130 124 170 100 Q 210 78 260 88" fill="none" stroke="#5B7553" stroke-width="2" opacity="0.6"/>
+<path d="M 0 132 Q 60 120 100 128 Q 140 140 180 120 Q 215 104 260 112" fill="none" stroke="#5B7553" stroke-width="1.4" opacity="0.4"/>
+<rect x="148" y="48" width="26" height="22" fill="none" stroke="#3D2B1F" stroke-width="3"/>
+<path d="M 144 48 L 161 30 L 178 48" fill="none" stroke="#3D2B1F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

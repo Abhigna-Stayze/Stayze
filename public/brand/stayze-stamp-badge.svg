@@ -1,0 +1,8 @@
+<svg width="84" height="84" viewBox="0 0 84 84" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Stayze FitScore verification stamp badge</title>
+<circle cx="42" cy="42" r="39" fill="none" stroke="#B5651D" stroke-width="2.5"/>
+<circle cx="42" cy="42" r="31" fill="none" stroke="#B5651D" stroke-width="1"/>
+<path d="M 28 48 L 28 34 L 36 34 M 28 41 L 35 41" fill="none" stroke="#B5651D" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 48 34 L 56 34 L 56 48 L 48 48 Z M 48 41 L 56 41" fill="none" stroke="#B5651D" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 22 56 Q 42 62 62 56" fill="none" stroke="#3D2B1F" stroke-width="1.4" stroke-linecap="round"/>
+</svg>

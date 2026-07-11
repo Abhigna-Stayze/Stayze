@@ -1,0 +1,7 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Stayze favicon - simplified roofline mark for 16-32px rendering</title>
+<rect width="32" height="32" fill="#3D2B1F"/>
+<path d="M 6 17 L 16 8 L 26 17" fill="none" stroke="#F2ECE0" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6 17 L 6 24 L 26 24 L 26 17" fill="none" stroke="#F2ECE0" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="13" y="19" width="6" height="5" fill="#D4853F"/>
+</svg>
