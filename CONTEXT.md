@@ -24,6 +24,7 @@ Next.js is a settled founder decision (Ashwin, 2026-07-03), recorded in the pare
 ```
 src/
   app/          App Router routes, layouts, global styles
+  lib/db.ts     Prisma client instance — import from here
   generated/    Prisma client — generated, gitignored
 prisma/
   schema.prisma Data model
@@ -33,7 +34,7 @@ public/
 
 The `@/*` path alias maps to `src/*`.
 
-`.agents/` and `.claude/` hold agent skills locally. Both are gitignored — see §4 below.
+`.agents/`, `.claude/` and `skills-lock.json` hold agent-skill setup locally. All are gitignored — see §4 below.
 
 The repo is scoped to `web/`, nested inside the `Stayze/` workspace folder on disk. The parent folder holds decks, design exports, images and the Drive-mirrored knowledge base — none of it is under version control here, and it should stay that way. Keeps the code history clean and the binaries out.
 
@@ -58,8 +59,9 @@ The logo, wordmark, favicon and badge SVGs were copied from the design folder in
 
 ```bash
 npm install prisma typescript tsx @types/node --save-dev
-npm install @prisma/client
 npm install dotenv --save-dev
+npm install @prisma/client @prisma/adapter-pg pg
+npm install @types/pg --save-dev
 npx prisma init
 npx prisma db push
 npx prisma generate
@@ -77,22 +79,25 @@ import { PrismaClient } from "@/generated/prisma/client";
 
 The `prisma-client` generator emits to `src/generated/prisma` (see the `output` in `schema.prisma`), so `@prisma/client` is the runtime dependency but not the import path. This import resolves and typechecks today — verified.
 
-**But `new PrismaClient()` does not compile yet, and this is the one thing standing between here and a working query.** Prisma 7 removed the bare constructor: `PrismaClientOptions` requires *either* a driver adapter *or* an Accelerate URL. There is no zero-argument form. For Supabase Postgres that means:
-
-```bash
-npm install @prisma/adapter-pg pg
-```
+**Prisma 7 has no zero-argument `PrismaClient` constructor.** `PrismaClientOptions` requires *either* a driver adapter *or* an Accelerate URL — `new PrismaClient()` will not compile. For Supabase Postgres the adapter is `@prisma/adapter-pg` (with `pg` and `@types/pg`), and the wiring lives in **`src/lib/db.ts`**:
 
 ```ts
-// src/lib/db.ts — does not exist yet
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@/generated/prisma/client";
+import { prisma } from "@/lib/db";
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
-export const prisma = new PrismaClient({ adapter });
+const users = await prisma.user.count();
 ```
 
-Use the **pooled** `DATABASE_URL` here — `DIRECT_URL` is for migrations only. In dev, cache the instance on `globalThis` so Next's hot reload doesn't open a new connection pool on every edit.
+That module builds the client over the **pooled** `DATABASE_URL` — `DIRECT_URL` is for migrations only — and caches the instance on `globalThis` outside production, so Next's hot reload doesn't open a fresh connection pool on every edit.
+
+Verified end to end against the live Supabase database: read, write and delete all work.
+
+### The `.env` gotcha that cost an hour
+
+`prisma init` writes a `.env` template, and the `DATABASE_URL` line here had been pasted in twice — the value itself began with `DATABASE_URL="`, so the URL parsed to a hostname of `base`.
+
+It went unnoticed because **`prisma.config.ts` points migrations at `DIRECT_URL`**, which was fine. So `prisma db push` succeeded, `prisma generate` succeeded, and everything *looked* healthy — while the pooled runtime URL, the one the app actually uses, was broken. Nothing touches `DATABASE_URL` until the first real query.
+
+If a query fails with a nonsense hostname, check `.env` for a duplicated key before anything else.
 
 `prisma init` produced `prisma/schema.prisma` and `prisma.config.ts`. The setup differs from stock Prisma in two ways that will confuse you if you don't know:
 
@@ -109,9 +114,9 @@ npx skills add supabase/agent-skills
 
 Installs the Supabase Postgres best-practices skill into `.agents/skills/`, with `.claude/skills/` holding a **relative symlink** to it so Claude Code picks it up.
 
-**The skill files are deliberately not committed.** `.agents/` and `.claude/` are gitignored; only `skills-lock.json`, which pins the version by content hash, is tracked. Same relationship as `package-lock.json` and `node_modules` — the lockfile travels, the contents are reinstalled. Run the command above on a fresh clone to restore the skill.
+**None of this is committed.** `.agents/`, `.claude/` and `skills-lock.json` are all gitignored — the skill is a local development aid, not part of the project. Run the command above to set it up on a new machine.
 
-(They *were* committed briefly, in commit `0d0e073`, then removed. The files remain in git history. They're public documentation from the Supabase repo — no secrets — so this was left alone rather than rewriting history.)
+(The skill files *were* committed briefly, in commit `0d0e073`, then removed. They remain in git history. They're public documentation from the Supabase repo — no secrets — so history was left alone rather than rewritten.)
 
 ## Environment
 
@@ -128,8 +133,7 @@ The pooled/direct split is a Supabase requirement, not a preference: PgBouncer i
 
 Real, and worth handling before building on top of this:
 
-- **No driver adapter, so the client cannot be instantiated.** The single blocker to querying the database. `npm install @prisma/adapter-pg pg`, then create `src/lib/db.ts` — see §3 above for the exact shape. Nothing imports the client yet, so nothing is currently broken.
-- **The `User` model is a placeholder.** Derive the real schema from the Content & Data Model spec.
+- **The `User` model is a placeholder.** `id` and `email`, nothing more. Derive the real schema from the Content & Data Model spec in the parent workspace.
 - **The brand is not applied.** The SVGs are in `public/brand/` but wired into nothing — the app still ships the default `src/app/favicon.ico`, and `globals.css` still carries the scaffold's Geist fonts and neutral colours rather than the brand palette and type stack. See the parent `CONTEXT.md` §1 for the palette and the Fraunces / Inter / JetBrains Mono stack. Note the mono-for-all-numerics rule is a hard rule there, not a suggestion.
 - **No CI, no tests, no migration history.** `db push` is being used rather than `migrate dev`, so there are no migration files. Fine while the schema is in flux; switch before anything ships.
 
@@ -157,4 +161,6 @@ Repo: `Abhigna-Stayze/Stayze` — private, default branch `main`.
 
 ## State
 
-Scaffold plus a database connection. One placeholder route, one placeholder model, no application code between them. No backend logic, no auth, no CI.
+Scaffold plus a **working** database connection. `src/lib/db.ts` queries the live Supabase Postgres instance — verified with a read, a write and a delete.
+
+What does not exist yet: any real data model, any application code that uses the client, auth, and CI. One placeholder route, one placeholder `User` model, nothing between them.

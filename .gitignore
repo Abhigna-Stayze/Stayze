@@ -47,3 +47,4 @@ next-env.d.ts
 # agent skills — kept local, restore with `npx skills add supabase/agent-skills`
 /.agents
 /.claude
+/skills-lock.json

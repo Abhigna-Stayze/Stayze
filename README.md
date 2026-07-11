@@ -44,6 +44,18 @@ npx prisma studio      # browse the data
 
 `db push` is fine while the schema is in flux. Switch to `npx prisma migrate dev` once the schema needs a versioned history.
 
+### Querying
+
+Import the client from [src/lib/db.ts](src/lib/db.ts) — never construct a `PrismaClient` directly:
+
+```ts
+import { prisma } from "@/lib/db";
+
+const users = await prisma.user.count();
+```
+
+That module wires the client to the pooled connection through `@prisma/adapter-pg` (Prisma 7 requires a driver adapter) and reuses a single instance across hot reloads in development.
+
 ## Scripts
 
 | Script              | Description                       |
@@ -59,6 +71,7 @@ npx prisma studio      # browse the data
 ```
 src/
   app/          App Router routes, layouts and global styles
+  lib/db.ts     Prisma client instance — import from here
   generated/    Prisma client (generated, gitignored)
 prisma/
   schema.prisma Data model
@@ -66,21 +79,15 @@ public/
   brand/        Logo, wordmark, favicon and badge SVGs
 ```
 
-`.agents/` and `.claude/` hold agent skills locally and are gitignored.
-
 The `@/*` path alias maps to `src/*`.
 
 ## Agent skills
 
-The Supabase Postgres best-practices skill is used locally but **not committed**. `.agents/` and `.claude/` are gitignored; only [skills-lock.json](skills-lock.json) is tracked, which pins the version by content hash.
-
-Restore the skill on a fresh clone with:
+The Supabase Postgres best-practices skill is a local development aid and is **not committed** — `.agents/`, `.claude/` and `skills-lock.json` are all gitignored. Set it up on a new machine with:
 
 ```bash
 npx skills add supabase/agent-skills
 ```
-
-Same relationship as `package-lock.json` and `node_modules`: the lockfile is committed, the contents are not.
 
 ## Context
 
