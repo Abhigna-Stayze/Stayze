@@ -36,12 +36,14 @@ Two variables, both from Supabase (Project Settings → Database → Connection 
 Prisma is the ORM; the schema is [prisma/schema.prisma](prisma/schema.prisma). Connection config lives in [prisma.config.ts](prisma.config.ts) rather than in the schema itself, which is why the `datasource` block carries no `url`.
 
 ```bash
-npx prisma db push     # push schema changes to the database (no migration files)
-npx prisma generate    # regenerate the client after editing the schema
-npx prisma studio      # browse the data
+npx prisma migrate dev --name <change>   # apply a schema change + write the migration
+npx prisma generate                      # regenerate the client (migrate dev does this too)
+npx prisma studio                        # browse the data
 ```
 
-`db push` is fine while the schema is in flux. Switch to `npx prisma migrate dev` once the schema needs a versioned history.
+**Use `migrate dev`. Do not use `prisma db push`.** `db push` applies a schema with no migration file, leaving no history and nothing to replay. It was used during initial setup, so it appears in old commits — that is not the pattern to follow. Migrations live in `prisma/migrations/` and are committed with the schema.
+
+The first migration has not been created yet — see the Migrations section of [CONTEXT.md](CONTEXT.md) for the two commands that get there.
 
 ### Querying
 

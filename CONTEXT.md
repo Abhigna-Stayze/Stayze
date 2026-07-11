@@ -4,6 +4,24 @@ Development context for the Stayze customer portal. Scope is deliberately narrow
 
 Business context — brand, business model, operations, payout tiers, open items — lives in `CONTEXT.md` and `AGENTS.md` in the **parent workspace folder**, one level above this repo. It is intentionally **not** duplicated here. Read it there. Don't copy it in: two copies drift, and a stale copy is worse than none.
 
+## Rules — read before touching the database or the client
+
+Three things that a fresh reader gets wrong by default. The repo's early history will actively mislead you on the first one.
+
+1. **Schema changes go through `npx prisma migrate dev`. Never `npx prisma db push`.**
+   `db push` applies a schema with no migration file, leaving no history and no way to replay a change. It was used during initial setup, so you will see it in old commands and old commits — that is not the pattern to copy. Migrations are versioned and committed under `prisma/migrations/`.
+
+2. **Import the client from `@/lib/db`. Never construct one.**
+
+   ```ts
+   import { prisma } from "@/lib/db";
+   ```
+
+   `new PrismaClient()` does not compile: Prisma 7 requires a driver adapter argument. `src/lib/db.ts` supplies it and caches the instance across hot reloads.
+
+3. **Generated types come from `@/generated/prisma/client`, not `@prisma/client`.**
+   `@prisma/client` is the runtime dependency, but the generator writes to `src/generated/prisma`, so that is the import path.
+
 ## Stack
 
 |                 |                               |
@@ -63,7 +81,7 @@ npm install dotenv --save-dev
 npm install @prisma/client @prisma/adapter-pg pg
 npm install @types/pg --save-dev
 npx prisma init
-npx prisma db push
+npx prisma db push      # <- initial setup only. Do NOT use this again; see Rules above.
 npx prisma generate
 ```
 
@@ -96,7 +114,20 @@ Verified end to end against the live Supabase database: read, write and delete a
 - **Connection config lives in `prisma.config.ts`, not the schema.** The `datasource db` block in `schema.prisma` deliberately carries no `url` / `directUrl`. Prisma 7 reads them from the config file instead, which is where `DIRECT_URL` is wired in for migrations.
 - **The client is generated to `src/generated/prisma`**, not into `node_modules`. That path is gitignored, so it must be generated after a clone. The `postinstall` script does this automatically — without it, CI and Vercel builds fail with `Cannot find module '@/generated/prisma/client'`.
 
-The schema currently holds one placeholder model (`User`, with `id` and `email`). It is not the real data model. The Content & Data Model spec in the parent workspace is what the real entities should be derived from.
+#### Migrations
+
+`prisma.config.ts` already points `migrations.path` at `prisma/migrations/` and routes migrations through `DIRECT_URL` — PgBouncer, on the pooled `DATABASE_URL`, cannot run the statements migrations need. The plumbing is done; the only thing required is to stop reaching for `db push`.
+
+The first migration has **not been created yet**. `prisma/schema.prisma` now holds the real Schema v1.1 (21 models — `Stay`, `Owner`, `BookingRequest`, `Review`, `TravelGuide`, …) and passes `prisma validate`, but the database still carries the placeholder `User` table that `db push` created during setup. Because that table has no migration behind it, the first `migrate dev` will report **schema drift** and demand a reset. Do it deliberately instead:
+
+```bash
+npx prisma migrate reset --force --skip-seed   # drops the placeholder User table
+npx prisma migrate dev --name init             # writes prisma/migrations/ and applies it
+```
+
+Safe today — the database holds one empty placeholder table and no rows. **`migrate reset` is destructive and development-only.** Never run it once real bookings exist.
+
+Commit `prisma/migrations/` alongside `schema.prisma`. From that point, every schema change is `migrate dev`.
 
 #### The `.env` gotcha
 
@@ -144,9 +175,14 @@ The pooled/direct split is a Supabase requirement, not a preference: PgBouncer i
 
 Real, and worth handling before building on top of this:
 
-- **Row Level Security is bypassed — decide the auth model before the real schema lands.** Prisma connects through the pooler as the `postgres` role, which ignores Supabase RLS policies entirely. This is fine today, but Stayze is a portal where guests, owners and partners must each see different data. If Supabase Auth is added later on the assumption that RLS protects those rows, **it will not**. Either enforce every access rule in application code, or connect as a restricted role and design RLS deliberately. This is an architecture decision, not a bug — but it must be a conscious one.
-- **The `User` model is a placeholder.** `id` and `email`, nothing more. Derive the real schema from the Content & Data Model spec in the parent workspace.
-- **No migration history.** `db push` is being used rather than `migrate dev`, so there are no migration files and no way to replay schema changes. Fine while the schema is in flux; switch to `prisma migrate` before anything ships.
+- **The first migration has not been run.** See "Migrations" above — the database is still on the placeholder `User` table while `schema.prisma` holds Schema v1.1. Do this before anything else.
+- **Schema v1.1 cuts scope the Developer Handoff lists as in-MVP.** Confirm with Ashwin before building around it, because §22 of that document makes it the contract:
+  - **There is no `User` model — no auth, no accounts.** So `/login`, `/signup`, `/account`, `/account/saved` (wishlist collections) and `/admin` have no data model behind them, yet §19 lists all of them as MVP. The trip timeline sidesteps this: a guest returns via the `BookingRequest.reference` code rather than logging in. Wishlist collections and the admin back-office (§9, "not skippable") cannot be built on v1.1 as written.
+  - **No standalone `Experience` model.** `StayExperience` is scoped to a single stay, so `/experiences` and `/experiences/[slug]` (§6.5) are unsupported.
+  - **No payment fields.** v1.1 settles open decision #1 as **Option B, WhatsApp request-to-book**. That matches §8's heading but contradicts §8's own recommendation ("Build A") and §19 ("Full booking flow (Option A)"). The handoff doc should be amended so it stops saying both.
+  - **`Review` has no link to `BookingRequest`**, so a reviewer cannot be verified as having stayed. Possibly deliberate, since `ReviewSource` allows imported Airbnb/Google reviews.
+  - **`Stay.ratingAvg` and `Stay.reviewCount` are denormalised.** Nothing maintains them; they must be recomputed whenever a review is published.
+- **Row Level Security is bypassed.** Prisma connects through the pooler as the `postgres` role, which ignores Supabase RLS policies entirely. It matters the moment auth exists: if Supabase Auth is added on the assumption that RLS protects rows, **it will not**. Either enforce every access rule in application code, or connect as a restricted role and design RLS deliberately. An architecture decision, not a bug — but it must be a conscious one.
 - **The brand is not applied.** The SVGs are in `public/brand/` but wired into nothing — the app still ships the default `src/app/favicon.ico`, and `globals.css` still carries the scaffold's Geist fonts and neutral colours rather than the brand palette and type stack. See the parent `CONTEXT.md` §1 for the palette and the Fraunces / Inter / JetBrains Mono stack. Note the mono-for-all-numerics rule is a hard rule there, not a suggestion.
 - **No tests.** CI runs format, lint, typecheck and build — but there is nothing to test yet.
 
@@ -168,12 +204,15 @@ Repo: `Abhigna-Stayze/Stayze` — private, default branch `main`.
 ## Conventions
 
 - Routes, layouts and global styles under `src/app/`.
+- Schema changes via `prisma migrate dev` — **never `db push`**. Commit the migration with the schema.
 - `npm run typecheck` and `npm run lint` both pass before a commit.
 - Never commit `.env*` (`.env.example` is the one exception, and it holds placeholders only).
-- Regenerate the Prisma client after any schema change.
+- Regenerate the Prisma client after any schema change (`migrate dev` does this for you).
 
 ## State
 
-Scaffold plus a **working** database connection. `src/lib/db.ts` queries the live Supabase Postgres instance — verified with a read, a write and a delete.
+Scaffold, a **working** database connection, and Schema v1.1 written but **not yet migrated**.
 
-What does not exist yet: any real data model, any application code that uses the client, auth, and CI. One placeholder route, one placeholder `User` model, nothing between them.
+`src/lib/db.ts` queries the live Supabase Postgres instance — verified with a read, a write and a delete. `prisma/schema.prisma` holds the real 21-model Schema v1.1 and passes `prisma validate`, but the database still has the placeholder `User` table from setup; the first migration is the immediate next step (see "Migrations").
+
+What does not exist yet: any application code that touches the client, auth, an admin surface, and any real content. One placeholder route, and nothing between it and the schema.

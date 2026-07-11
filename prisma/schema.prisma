@@ -1,4 +1,14 @@
 // prisma/schema.prisma
+//
+// Stayze — Customer Portal · Database Schema v1.1
+// Source of truth: "Stayze — Database Schema v1.1 (Page-wise, for Prisma).docx"
+//
+// MEDIA: images and videos are never stored in Postgres. Rows carry a Supabase
+// Storage reference (bucket + path) only; the public URL is derived at read time
+// with the Supabase SDK. mapsUrl and instagramUrl are external links, not media,
+// and stay plain URLs.
+//
+// Buckets: stays · owners · reviews · guides · experiences
 
 generator client {
   provider = "prisma-client"
@@ -10,7 +20,530 @@ datasource db {
   // Both url and directUrl have been removed from here
 }
 
-model User {
-  id    Int    @id @default(autoincrement())
-  email String @unique
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Tier {
+  FOUNDATION
+  STANDARD
+  PREMIUM
+}
+
+enum Verification {
+  VERIFIED
+  DIRECTORY
+}
+
+enum StayStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum MediaType {
+  PHOTO
+  VIDEO
+}
+
+enum TagType {
+  OCCASION
+  FEATURE
+  BUDGET
+}
+
+enum PlaceCategory {
+  WATERFALL
+  VIEWPOINT
+  TREK
+  CAFE
+  TEMPLE
+  ESTATE
+  LAKE
+  OTHER
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  BOOKED
+  BLOCKED
+}
+
+enum BookingStatus {
+  NEW
+  CONTACTED
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum TripStep {
+  BOOKING_CONFIRMED
+  WEATHER
+  DIRECTIONS
+  CARETAKER_CONTACT
+  CHECKIN_GUIDE
+  THINGS_TO_PACK
+  NEARBY_ATTRACTIONS
+  ENJOY_STAY
+  LEAVE_REVIEW
+}
+
+enum StepStatus {
+  PENDING
+  DONE
+}
+
+enum ReviewSource {
+  DIRECT
+  AIRBNB
+  GOOGLE
+  MMT
+}
+
+// ---------------------------------------------------------------------------
+// Core
+// ---------------------------------------------------------------------------
+
+/// The core entity. Everything on Explore and Stay Detail hangs off this.
+model Stay {
+  id           String  @id @default(cuid())
+  propertyCode String  @unique /// P001, P002 — matches the Drive/ops registry
+  slug         String  @unique /// URL: /stays/coffeecharm
+  name         String
+  type         String /// "Coffee Estate Stay", "Plantation Villa"
+  tagline      String? /// One-line essence used on cards/index
+  story        String  @db.Text /// THE STAY STORY — long narrative shown before the rooms
+  storyExcerpt String? /// Short pull-quote for cards / similar stays
+
+  area               String /// "Mallandur", "Kanathi"
+  addressLine        String? /// Internal / shared after booking
+  latitude           Decimal? @db.Decimal(9, 6)
+  longitude          Decimal? @db.Decimal(9, 6)
+  distanceFromTownKm Decimal? @db.Decimal(6, 2) /// Shown as "22 km from Chikmagalur"
+
+  basePricePerNight Decimal  @db.Decimal(10, 2) /// ₹ per night; display + estimate only (no payment)
+  currency          String   @default("INR")
+  maxGuests         Int
+  bedrooms          Int
+  bathrooms         Int
+  acres             Decimal? @db.Decimal(6, 2) /// "2 Acres"
+  checkInTime       String /// "2:00 PM"
+  checkOutTime      String /// "11:00 AM"
+
+  fitScore     Int? /// 0–100 — powers the "✓ Inspected 89" mark
+  tier         Tier?
+  inspectedOn  DateTime? /// Date the property was physically visited
+  inspectedBy  String? /// Name of the person who visited (trust signal)
+  verification Verification /// Never display VERIFIED and DIRECTORY the same way
+
+  caretakerName  String? /// "Ramu" — named, never "staff"
+  caretakerPhone String? /// PRIVATE. Only revealed on the Trip Timeline after booking
+
+  ratingAvg   Decimal? @db.Decimal(3, 2) /// Denormalised from Review for fast cards
+  reviewCount Int      @default(0)
+
+  isFeatured    Boolean @default(false) /// Drives Home "Featured Stays"
+  featuredOrder Int? /// Manual ordering on Home
+
+  status          StayStatus
+  metaTitle       String?
+  metaDescription String?
+
+  ownerId String
+  owner   Owner  @relation(fields: [ownerId], references: [id])
+
+  images          StayImage[]
+  rooms           Room[]
+  highlights      StayHighlight[]
+  experiences     StayExperience[]
+  amenities       StayAmenity[]
+  nearbyPlaces    NearbyPlace[]
+  reviews         Review[]
+  availability    StayAvailability[]
+  tags            StayTag[]
+  bookingRequests BookingRequest[]
+  guides          GuideStay[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([isFeatured])
+  @@index([area])
+}
+
+/// The host. Public profile is shown on Stay Detail ("Meet your host").
+/// phone and email are PRIVATE — exclude them in the public API layer.
+model Owner {
+  id   String @id @default(cuid())
+  name String /// PUBLIC — "Yogesh & family"
+
+  photoBucket String? @default("owners") /// PUBLIC — Supabase bucket
+  photoPath   String? /// PUBLIC — path inside the bucket, e.g. "owner-014/profile.jpg"
+
+  bio          String?  @db.Text /// PUBLIC — their story, why they host
+  hostingSince Int? /// PUBLIC — year, renders "Hosting since 2019"
+  languages    String[] /// PUBLIC — ["Kannada","English","Hindi"]
+  location     String? /// PUBLIC — "Lives on the estate"
+
+  phone String? /// PRIVATE — internal ops only. Never expose.
+  email String? /// PRIVATE — internal ops only. Never expose.
+
+  isPublicProfile Boolean @default(true) /// Hide the block if the owner declines
+
+  stays Stay[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Stay media & content
+// ---------------------------------------------------------------------------
+
+/// Hero gallery for a stay. Media lives in Supabase Storage; only the reference
+/// is stored here.
+model StayImage {
+  id     String @id @default(cuid())
+  stayId String
+  stay   Stay   @relation(fields: [stayId], references: [id], onDelete: Cascade)
+
+  bucket String @default("stays") /// Supabase bucket name
+  path   String /// e.g. "property-001/hero.jpg" — path INSIDE the bucket
+
+  altText   String? /// Accessibility + SEO
+  caption   String?
+  mediaType MediaType
+  isHero    Boolean   @default(false) /// The card image
+  sortOrder Int       @default(0)
+
+  width    Int? /// Responsive images / prevent layout shift
+  height   Int?
+  fileSize Int? /// bytes
+  mimeType String? /// image/jpeg, video/mp4
+
+  @@unique([bucket, path]) /// Stop the same object being registered twice
+  @@index([stayId])
+}
+
+/// Rooms inside a stay (the "Rooms" section).
+model Room {
+  id     String @id @default(cuid())
+  stayId String
+  stay   Stay   @relation(fields: [stayId], references: [id], onDelete: Cascade)
+
+  name        String /// "The Estate Room"
+  description String?
+  bedType     String? /// "1 King bed"
+  maxGuests   Int
+
+  imageBucket String? @default("stays") /// Supabase bucket
+  imagePath   String? /// e.g. "property-001/rooms/estate-room.jpg"
+
+  sortOrder Int
+
+  @@index([stayId])
+}
+
+/// The 2–3 signature features that answer "why THIS stay?" on the card.
+model StayHighlight {
+  id     String @id @default(cuid())
+  stayId String
+  stay   Stay   @relation(fields: [stayId], references: [id], onDelete: Cascade)
+
+  label     String /// "Free Breakfast", "Bonfire", "2 Acres"
+  icon      String? /// icon key
+  sortOrder Int
+
+  @@index([stayId])
+}
+
+/// "What you'll experience" — per stay (coffee walk, campfire, estate tour).
+model StayExperience {
+  id     String @id @default(cuid())
+  stayId String
+  stay   Stay   @relation(fields: [stayId], references: [id], onDelete: Cascade)
+
+  title       String /// "Morning coffee walk"
+  description String?
+
+  imageBucket String? @default("experiences") /// Supabase bucket
+  imagePath   String? /// path inside the bucket
+
+  sortOrder Int
+
+  @@index([stayId])
+}
+
+/// Must-visit places AROUND THIS STAY. Scoped to one stay — there is no
+/// destination-wide activities table in v1.
+model NearbyPlace {
+  id     String @id @default(cuid())
+  stayId String
+  stay   Stay   @relation(fields: [stayId], references: [id], onDelete: Cascade)
+
+  name        String /// "Mullayanagiri Peak"
+  description String? /// One or two honest, specific lines
+  category    PlaceCategory
+
+  distanceKm       Decimal? @db.Decimal(6, 2) /// "12 km away"
+  driveTimeMinutes Int? /// "25 min drive"
+
+  imageBucket String? @default("stays") /// Place photos sit with the stay
+  imagePath   String? /// path inside the bucket
+
+  mapsUrl String? /// Google Maps deep link — an EXTERNAL link, not storage
+
+  latitude  Decimal? @db.Decimal(9, 6)
+  longitude Decimal? @db.Decimal(9, 6)
+  sortOrder Int      @default(0)
+
+  @@index([stayId])
+}
+
+// ---------------------------------------------------------------------------
+// Amenities & tags (M:N)
+// ---------------------------------------------------------------------------
+
+/// Master amenity list.
+model Amenity {
+  id       String  @id @default(cuid())
+  name     String  @unique /// "WiFi", "Hot water", "Parking"
+  icon     String?
+  category String? /// BASICS | OUTDOOR | KITCHEN | SAFETY
+
+  stays StayAmenity[]
+}
+
+model StayAmenity {
+  stayId    String
+  amenityId String
+
+  stay    Stay    @relation(fields: [stayId], references: [id], onDelete: Cascade)
+  amenity Amenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([stayId, amenityId])
+  @@index([stayId])
+  @@index([amenityId])
+}
+
+/// The Explore filter chips. Keep this vocabulary fixed — do not let it sprawl.
+model Tag {
+  id   String  @id @default(cuid())
+  name String /// Couples, Family, Luxury, Pet Friendly, Pool, Coffee Estate, Workation, Budget
+  slug String  @unique /// URL: /explore?tag=coffee-estate
+  type TagType
+
+  stays StayTag[]
+}
+
+model StayTag {
+  stayId String
+  tagId  String
+
+  stay Stay @relation(fields: [stayId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([stayId, tagId])
+  @@index([stayId])
+  @@index([tagId])
+}
+
+// ---------------------------------------------------------------------------
+// Reviews
+// ---------------------------------------------------------------------------
+
+model Review {
+  id     String @id @default(cuid())
+  stayId String
+  stay   Stay   @relation(fields: [stayId], references: [id], onDelete: Cascade)
+
+  guestName   String
+  rating      Int /// 1–5
+  title       String?
+  comment     String       @db.Text
+  stayedOn    DateTime?
+  source      ReviewSource
+  isPublished Boolean      @default(false) /// Moderate before showing
+
+  images ReviewImage[]
+
+  @@index([stayId])
+}
+
+/// The "Guest memories" strip. Guest-uploaded media, stored in Supabase Storage.
+model ReviewImage {
+  id       String @id @default(cuid())
+  reviewId String
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  bucket String @default("reviews") /// Guest-uploaded media
+  path   String /// e.g. "review-482/img-1.jpg"
+
+  width    Int?
+  height   Int?
+  fileSize Int? /// bytes — useful to cap guest uploads
+  mimeType String?
+
+  @@unique([bucket, path]) /// Stop the same object being registered twice
+  @@index([reviewId])
+}
+
+// ---------------------------------------------------------------------------
+// Availability
+// ---------------------------------------------------------------------------
+
+/// Per-date availability for the calendar. One row per stay per date.
+model StayAvailability {
+  id     String @id @default(cuid())
+  stayId String
+  stay   Stay   @relation(fields: [stayId], references: [id], onDelete: Cascade)
+
+  date          DateTime           @db.Date
+  status        AvailabilityStatus
+  priceOverride Decimal?           @db.Decimal(10, 2) /// Weekend / festival pricing
+
+  @@unique([stayId, date]) /// What makes the calendar and the date filter correct
+  @@index([stayId])
+}
+
+// ---------------------------------------------------------------------------
+// Booking (WhatsApp — no payment)
+// ---------------------------------------------------------------------------
+
+/// Captures what the guest typed, then builds the WhatsApp message sent to the
+/// Stayze number. The reference code is how a guest (with no account) returns
+/// to their Trip Timeline.
+model BookingRequest {
+  id        String @id @default(cuid())
+  reference String @unique /// PUBLIC code, e.g. "STZ-8F3K2"
+
+  stayId String
+  stay   Stay   @relation(fields: [stayId], references: [id])
+
+  guestName  String
+  guestPhone String /// WhatsApp number of the guest
+  guestEmail String?
+
+  checkIn  DateTime
+  checkOut DateTime
+  nights   Int /// Computed and stored
+  adults   Int
+  children Int      @default(0)
+  note     String? /// "Any special requests?"
+
+  estimatedTotal Decimal? @db.Decimal(10, 2) /// Snapshot at request time — an ESTIMATE, not a charge
+
+  whatsappMessage String?   @db.Text /// The exact prefilled text sent (audit trail)
+  whatsappSentAt  DateTime? /// When the guest was handed off to WhatsApp
+
+  status BookingStatus
+  source String        @default("WEBSITE")
+
+  timeline TripTimelineStep[] /// Created when status → CONFIRMED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([stayId])
+  @@index([status])
+}
+
+/// The guided post-booking journey. One row per step, per booking.
+model TripTimelineStep {
+  id               String         @id @default(cuid())
+  bookingRequestId String
+  bookingRequest   BookingRequest @relation(fields: [bookingRequestId], references: [id], onDelete: Cascade)
+
+  stepKey     TripStep
+  title       String /// "Ramu, your caretaker"
+  content     String?    @db.Text /// Text/markdown shown for the step
+  status      StepStatus
+  sortOrder   Int
+  completedAt DateTime?
+
+  @@index([bookingRequestId])
+}
+
+// ---------------------------------------------------------------------------
+// Travel Guide
+// ---------------------------------------------------------------------------
+
+model GuideCategory {
+  id   String @id @default(cuid())
+  name String /// Things To Do, Best Cafes, Hidden Waterfalls, Coffee Trails, Monsoon Travel, Itineraries
+  slug String @unique
+
+  guides TravelGuide[]
+}
+
+model TravelGuide {
+  id      String  @id @default(cuid())
+  slug    String  @unique /// /travel-guide/2-day-chikmagalur-itinerary
+  title   String
+  excerpt String?
+
+  coverImageBucket String? @default("guides") /// Supabase bucket
+  coverImagePath   String? /// e.g. "monsoon-guide/cover.jpg"
+
+  body String @db.Text /// Markdown / MDX
+
+  categoryId String
+  category   GuideCategory @relation(fields: [categoryId], references: [id])
+
+  readTimeMinutes Int? /// "6 min"
+  author          String?
+  isPublished     Boolean   @default(false)
+  publishedAt     DateTime?
+
+  metaTitle       String?
+  metaDescription String?
+
+  stays GuideStay[] /// Optional links to stays featured in the guide
+
+  @@index([categoryId])
+  @@index([isPublished])
+}
+
+/// Optional join: stays featured in a guide.
+model GuideStay {
+  guideId String
+  stayId  String
+
+  guide TravelGuide @relation(fields: [guideId], references: [id], onDelete: Cascade)
+  stay  Stay        @relation(fields: [stayId], references: [id], onDelete: Cascade)
+
+  @@id([guideId, stayId])
+  @@index([guideId])
+  @@index([stayId])
+}
+
+// ---------------------------------------------------------------------------
+// Site config & support
+// ---------------------------------------------------------------------------
+
+/// A single-row config table. Critically: the Stayze WhatsApp number the
+/// booking message is sent to.
+model SiteSetting {
+  id             String  @id /// Use a fixed id, e.g. "default"
+  whatsappNumber String /// THE Stayze booking number (replace the 910000000000 placeholder!)
+  supportPhone   String?
+  supportEmail   String? /// hello@stayze.in
+  instagramUrl   String? /// An EXTERNAL link, not storage
+
+  updatedAt DateTime @updatedAt
+}
+
+/// Optional: support enquiries from the floating Need Help button.
+model ContactMessage {
+  id      String  @id @default(cuid())
+  name    String
+  phone   String?
+  email   String?
+  message String  @db.Text
+  channel String /// WHATSAPP | CALL | EMAIL
+
+  createdAt DateTime @default(now())
 }
