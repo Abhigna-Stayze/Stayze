@@ -26,8 +26,11 @@ jobs:
           node-version: 24
           cache: npm
 
-      # postinstall runs `prisma generate`, which the build depends on.
-      - run: npm ci
+      # `npm install`, not `npm ci`: npm resolves optional native deps
+      # (@emnapi, via tailwind's oxide-wasm fallback) differently across npm
+      # versions, so `npm ci` rejects the lockfile as out of sync. Not worth
+      # fighting. postinstall runs `prisma generate`, which the build needs.
+      - run: npm install
 
       - run: npm run format:check
       - run: npm run lint
