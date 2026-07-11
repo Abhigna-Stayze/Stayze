@@ -1,18 +1,18 @@
 # Context — development
 
-Development context for the Stayze customer portal. The scope of this file is deliberately narrow: **how the codebase is set up, and how to work in it.**
+Development context for the Stayze customer portal. Scope is deliberately narrow: **how the codebase is set up, and how to work in it.** It is written so that someone (or some agent) with no prior conversation can pick the project up cold.
 
-Business context — brand, business model, operations, payout tiers, open items — lives in `CONTEXT.md` and `AGENTS.md` in the parent workspace folder, one level above this repo. It is intentionally **not** duplicated here. Read it there. Don't copy it in: two copies drift, and a stale copy is worse than none.
+Business context — brand, business model, operations, payout tiers, open items — lives in `CONTEXT.md` and `AGENTS.md` in the **parent workspace folder**, one level above this repo. It is intentionally **not** duplicated here. Read it there. Don't copy it in: two copies drift, and a stale copy is worse than none.
 
-## What this is
-
-The Stayze customer portal frontend.
+## Stack
 
 | | |
 | --- | --- |
 | Framework | Next.js 16, App Router |
 | Language | TypeScript (strict) |
 | Styling | Tailwind CSS v4 |
+| Database | Supabase (Postgres) |
+| ORM | Prisma 7 |
 | Linting | ESLint (`eslint-config-next`) |
 | Package manager | npm |
 | Node | 20 or newer |
@@ -24,29 +24,80 @@ Next.js is a settled founder decision (Ashwin, 2026-07-03), recorded in the pare
 ```
 src/
   app/          App Router routes, layouts, global styles
+  generated/    Prisma client — generated, gitignored
+prisma/
+  schema.prisma Data model
 public/
   brand/        Logo, wordmark, favicon and badge SVGs
+.agents/skills/ Vendored agent skills (.claude/skills symlinks here)
 ```
 
 The `@/*` path alias maps to `src/*`.
 
-The repo is scoped to `web/`, nested inside the `Stayze/` workspace folder on disk. The parent folder holds decks, design exports, images and the Drive-mirrored knowledge base — none of that is under version control here, and it should stay that way. Keeps the code history clean and the binaries out.
+The repo is scoped to `web/`, nested inside the `Stayze/` workspace folder on disk. The parent folder holds decks, design exports, images and the Drive-mirrored knowledge base — none of it is under version control here, and it should stay that way. Keeps the code history clean and the binaries out.
 
-## How this was initialized
+## How the project was built, in order
 
-1. `create-next-app` — TypeScript, Tailwind, ESLint, App Router, `src/` directory, `@/*` alias, npm. Git init skipped, so the repo could be initialized deliberately.
-2. Stripped the scaffold's boilerplate: the `CLAUDE.md` / `AGENTS.md` it emits, the demo splash page, and the Next.js / Vercel marketing SVGs in `public/`.
-3. Home page replaced with a plain Stayze placeholder.
-4. Real metadata in `src/app/layout.tsx` — title template `%s · Stayze`, not "Create Next App".
-5. Package renamed from `web` to `stayze`; added a `typecheck` script.
-6. Brand SVGs copied into `public/brand/` from the design folder.
+### 1. Next.js scaffold
 
-### Two scaffold defaults that were wrong
+`create-next-app` — TypeScript, Tailwind, ESLint, App Router, `src/` directory, `@/*` alias, npm. Git init was skipped so the repo could be initialized deliberately.
 
-Both are easy to reintroduce, so they're worth knowing:
+Then the boilerplate was stripped: the `CLAUDE.md` / `AGENTS.md` that `create-next-app` emits, the demo splash page, and the Next.js / Vercel marketing SVGs in `public/`. The home page is now a plain Stayze placeholder. Metadata in `src/app/layout.tsx` uses a `%s · Stayze` title template. The package was renamed from `web` to `stayze` and a `typecheck` script added.
+
+**Two scaffold defaults were wrong and were fixed.** Both are easy to reintroduce, so they're worth knowing:
 
 - **Font.** `create-next-app` loads Geist via `next/font`, then overrides `body` with `font-family: Arial, Helvetica, sans-serif` in `globals.css` — so the font it just loaded never applied. Now points at `var(--font-sans)`.
 - **Package name.** Defaulted to `web`, after the directory. Not what the project is called.
+
+### 2. Brand assets
+
+The logo, wordmark, favicon and badge SVGs were copied from the design folder into `public/brand/`.
+
+### 3. Prisma + Supabase
+
+```bash
+npm install prisma typescript tsx @types/node --save-dev
+npx prisma init
+npx prisma db push
+```
+
+Note `@types/node`, not `@type/node` — the latter is a typo and does not exist on npm.
+
+`prisma init` produced `prisma/schema.prisma` and `prisma.config.ts`. The setup differs from stock Prisma in two ways that will confuse you if you don't know:
+
+- **Connection config lives in `prisma.config.ts`, not the schema.** The `datasource db` block in `schema.prisma` deliberately carries no `url` / `directUrl`. Prisma 7 reads them from the config file instead, which is where `DIRECT_URL` is wired in for migrations.
+- **The client is generated to `src/generated/prisma`**, not into `node_modules`. That path is gitignored, so **a fresh clone must run `npx prisma generate`** or imports will fail.
+
+The schema currently holds one placeholder model (`User`, with `id` and `email`). It is not the real data model. The Content & Data Model spec in the parent workspace is what the real entities should be derived from.
+
+### 4. Agent skills
+
+```bash
+npx skills add supabase/agent-skills
+```
+
+Vendors the Supabase Postgres best-practices skill into `.agents/skills/`, with `.claude/skills/` holding a **relative symlink** to it so Claude Code picks it up. `skills-lock.json` pins the version by content hash. All three are committed, so the skill travels with the repo.
+
+## Environment
+
+Two variables, both from Supabase (Project Settings → Database → Connection string). `.env.example` is the template; `.env` is gitignored and must never be committed.
+
+| Variable | Port | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | 6543 | Pooled connection (PgBouncer). App runtime. |
+| `DIRECT_URL` | 5432 | Direct, unpooled. Migrations require this. |
+
+The pooled/direct split is a Supabase requirement, not a preference: PgBouncer in transaction mode can't run the statements migrations need.
+
+## Known gaps
+
+Real, and worth handling before building on top of this:
+
+- **`@prisma/client` is not installed.** Only the `prisma` CLI is a dependency. Nothing imports the client yet, so nothing is broken — but the moment application code needs to query the database, `npm install @prisma/client` and `npx prisma generate` are both required.
+- **`dotenv` is imported but not declared.** `prisma.config.ts` starts with `import "dotenv/config"`, yet `dotenv` is not in `package.json`. It currently resolves as a transitive dependency, which works until it doesn't. Add it explicitly: `npm install dotenv --save-dev`.
+- **The `User` model is a placeholder.** Derive the real schema from the Content & Data Model spec.
+- **The brand is not applied.** The SVGs are in `public/brand/` but wired into nothing — the app still ships the default `src/app/favicon.ico`, and `globals.css` still carries the scaffold's Geist fonts and neutral colours rather than the brand palette and type stack. See the parent `CONTEXT.md` §1 for the palette and the Fraunces / Inter / JetBrains Mono stack. Note the mono-for-all-numerics rule is a hard rule there, not a suggestion.
+- **No CI, no tests, no migration history.** `db push` is being used rather than `migrate dev`, so there are no migration files. Fine while the schema is in flux; switch before anything ships.
 
 ## Commit identity
 
@@ -67,10 +118,9 @@ Repo: `Abhigna-Stayze/Stayze` — private, default branch `main`.
 
 - Routes, layouts and global styles under `src/app/`.
 - `npm run typecheck` and `npm run lint` both pass before a commit.
-- Never commit `.env*`. Secrets stay out of the repo.
+- Never commit `.env*` (`.env.example` is the one exception, and it holds placeholders only).
+- Regenerate the Prisma client after any schema change.
 
 ## State
 
-Scaffold. One placeholder route, no backend, no CI.
-
-The brand SVGs are in `public/brand/` but aren't wired into anything yet — the app still ships the default `src/app/favicon.ico`, and `globals.css` still carries the scaffold's Geist fonts and neutral colours rather than the brand palette and type stack. Applying the brand is the obvious next piece of work.
+Scaffold plus a database connection. One placeholder route, one placeholder model, no application code between them. No backend logic, no auth, no CI.
