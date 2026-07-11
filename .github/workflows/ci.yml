@@ -18,9 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 22+ is required by Prisma 7. Node 24 ships npm 11, which matches
+      # the lockfile — npm 10 resolves optional native deps differently and
+      # makes `npm ci` fail on a lockfile it considers out of sync.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       # postinstall runs `prisma generate`, which the build depends on.

@@ -4,7 +4,7 @@ Customer portal for Stayze. Next.js (App Router), TypeScript, Tailwind CSS, Pris
 
 ## Requirements
 
-- Node.js 20 or newer
+- Node.js 22 or newer (required by Prisma 7)
 - npm
 - A Supabase project (Postgres)
 

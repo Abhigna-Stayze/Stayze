@@ -15,7 +15,7 @@ Business context — brand, business model, operations, payout tiers, open items
 | ORM             | Prisma 7                      |
 | Linting         | ESLint (`eslint-config-next`) |
 | Package manager | npm                           |
-| Node            | 20 or newer                   |
+| Node            | 22 or newer (Prisma 7)        |
 
 Next.js is a settled founder decision (Ashwin, 2026-07-03), recorded in the parent folder under `00 — Foundation / Stayze — Decision Log — Tech Direction Resolution (2026-07-03).md`. It supersedes the earlier "static HTML, no framework" ADR. App Router vs Pages was left open in that entry; this scaffold answers it — **App Router**.
 
@@ -124,6 +124,8 @@ Installs the Supabase Postgres best-practices skill into `.agents/skills/`, with
 - **Zod-validated env** in `src/lib/env.ts`. Import `env` from there, not `process.env`.
 - **Prettier**, with `prettier-plugin-tailwindcss` to sort class names and `eslint-config-prettier` to stop ESLint fighting it. `npm run format` writes, `npm run format:check` verifies.
 - **GitHub Actions** (`.github/workflows/ci.yml`) runs format-check, lint, typecheck and build on every push to `main` and every PR. It supplies placeholder connection strings — the build never opens a connection, but `env.ts` validates the shape at import.
+
+**CI pins Node 24, and the version matters twice over.** Prisma 7 requires Node ≥ 22 (`@prisma/streams-local` declares it), so Node 20 is out. And the npm major has to match the one that wrote `package-lock.json`: npm 10 and npm 11 resolve optional native dependencies differently, so `npm ci` on Node 20 rejects an npm 11 lockfile with `Missing: @emnapi/runtime from lock file`. Node 24 ships npm 11. If you regenerate the lockfile on a different npm major, expect CI to fail until the two agree. `engines` in `package.json` declares the floor.
 
 ## Environment
 
