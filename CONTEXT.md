@@ -29,10 +29,11 @@ prisma/
   schema.prisma Data model
 public/
   brand/        Logo, wordmark, favicon and badge SVGs
-.agents/skills/ Vendored agent skills (.claude/skills symlinks here)
 ```
 
 The `@/*` path alias maps to `src/*`.
+
+`.agents/` and `.claude/` hold agent skills locally. Both are gitignored — see §4 below.
 
 The repo is scoped to `web/`, nested inside the `Stayze/` workspace folder on disk. The parent folder holds decks, design exports, images and the Drive-mirrored knowledge base — none of it is under version control here, and it should stay that way. Keeps the code history clean and the binaries out.
 
@@ -57,11 +58,41 @@ The logo, wordmark, favicon and badge SVGs were copied from the design folder in
 
 ```bash
 npm install prisma typescript tsx @types/node --save-dev
+npm install @prisma/client
+npm install dotenv --save-dev
 npx prisma init
 npx prisma db push
+npx prisma generate
 ```
 
 Note `@types/node`, not `@type/node` — the latter is a typo and does not exist on npm.
+
+`@prisma/client` is the runtime the generated client needs; `dotenv` is required because `prisma.config.ts` opens with `import "dotenv/config"`. Both are declared explicitly rather than leaned on as transitive dependencies.
+
+**Import the client from the generated path, not from `@prisma/client`:**
+
+```ts
+import { PrismaClient } from "@/generated/prisma/client";
+```
+
+The `prisma-client` generator emits to `src/generated/prisma` (see the `output` in `schema.prisma`), so `@prisma/client` is the runtime dependency but not the import path. This import resolves and typechecks today — verified.
+
+**But `new PrismaClient()` does not compile yet, and this is the one thing standing between here and a working query.** Prisma 7 removed the bare constructor: `PrismaClientOptions` requires *either* a driver adapter *or* an Accelerate URL. There is no zero-argument form. For Supabase Postgres that means:
+
+```bash
+npm install @prisma/adapter-pg pg
+```
+
+```ts
+// src/lib/db.ts — does not exist yet
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "@/generated/prisma/client";
+
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+export const prisma = new PrismaClient({ adapter });
+```
+
+Use the **pooled** `DATABASE_URL` here — `DIRECT_URL` is for migrations only. In dev, cache the instance on `globalThis` so Next's hot reload doesn't open a new connection pool on every edit.
 
 `prisma init` produced `prisma/schema.prisma` and `prisma.config.ts`. The setup differs from stock Prisma in two ways that will confuse you if you don't know:
 
@@ -76,7 +107,11 @@ The schema currently holds one placeholder model (`User`, with `id` and `email`)
 npx skills add supabase/agent-skills
 ```
 
-Vendors the Supabase Postgres best-practices skill into `.agents/skills/`, with `.claude/skills/` holding a **relative symlink** to it so Claude Code picks it up. `skills-lock.json` pins the version by content hash. All three are committed, so the skill travels with the repo.
+Installs the Supabase Postgres best-practices skill into `.agents/skills/`, with `.claude/skills/` holding a **relative symlink** to it so Claude Code picks it up.
+
+**The skill files are deliberately not committed.** `.agents/` and `.claude/` are gitignored; only `skills-lock.json`, which pins the version by content hash, is tracked. Same relationship as `package-lock.json` and `node_modules` — the lockfile travels, the contents are reinstalled. Run the command above on a fresh clone to restore the skill.
+
+(They *were* committed briefly, in commit `0d0e073`, then removed. The files remain in git history. They're public documentation from the Supabase repo — no secrets — so this was left alone rather than rewriting history.)
 
 ## Environment
 
@@ -93,8 +128,7 @@ The pooled/direct split is a Supabase requirement, not a preference: PgBouncer i
 
 Real, and worth handling before building on top of this:
 
-- **`@prisma/client` is not installed.** Only the `prisma` CLI is a dependency. Nothing imports the client yet, so nothing is broken — but the moment application code needs to query the database, `npm install @prisma/client` and `npx prisma generate` are both required.
-- **`dotenv` is imported but not declared.** `prisma.config.ts` starts with `import "dotenv/config"`, yet `dotenv` is not in `package.json`. It currently resolves as a transitive dependency, which works until it doesn't. Add it explicitly: `npm install dotenv --save-dev`.
+- **No driver adapter, so the client cannot be instantiated.** The single blocker to querying the database. `npm install @prisma/adapter-pg pg`, then create `src/lib/db.ts` — see §3 above for the exact shape. Nothing imports the client yet, so nothing is currently broken.
 - **The `User` model is a placeholder.** Derive the real schema from the Content & Data Model spec.
 - **The brand is not applied.** The SVGs are in `public/brand/` but wired into nothing — the app still ships the default `src/app/favicon.ico`, and `globals.css` still carries the scaffold's Geist fonts and neutral colours rather than the brand palette and type stack. See the parent `CONTEXT.md` §1 for the palette and the Fraunces / Inter / JetBrains Mono stack. Note the mono-for-all-numerics rule is a hard rule there, not a suggestion.
 - **No CI, no tests, no migration history.** `db push` is being used rather than `migrate dev`, so there are no migration files. Fine while the schema is in flux; switch before anything ships.

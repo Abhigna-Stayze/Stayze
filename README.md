@@ -64,20 +64,23 @@ prisma/
   schema.prisma Data model
 public/
   brand/        Logo, wordmark, favicon and badge SVGs
-.agents/skills/ Vendored agent skills (.claude/skills symlinks here)
 ```
+
+`.agents/` and `.claude/` hold agent skills locally and are gitignored.
 
 The `@/*` path alias maps to `src/*`.
 
 ## Agent skills
 
-The Supabase Postgres best-practices skill is vendored in via [`skills`](https://www.npmjs.com/package/skills):
+The Supabase Postgres best-practices skill is used locally but **not committed**. `.agents/` and `.claude/` are gitignored; only [skills-lock.json](skills-lock.json) is tracked, which pins the version by content hash.
+
+Restore the skill on a fresh clone with:
 
 ```bash
 npx skills add supabase/agent-skills
 ```
 
-Files land in `.agents/skills/`, with `.claude/skills/` symlinked to them so Claude Code picks them up. [skills-lock.json](skills-lock.json) pins the version.
+Same relationship as `package-lock.json` and `node_modules`: the lockfile is committed, the contents are not.
 
 ## Context
 

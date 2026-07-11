@@ -43,3 +43,7 @@ next-env.d.ts
 
 # prisma client is generated, not committed — run `npx prisma generate`
 /src/generated/prisma
+
+# agent skills — kept local, restore with `npx skills add supabase/agent-skills`
+/.agents
+/.claude
