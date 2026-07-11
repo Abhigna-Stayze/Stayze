@@ -160,9 +160,9 @@ Installs the Supabase Postgres best-practices skill into `.agents/skills/`, with
 
 ## Environment
 
-Two variables, both from Supabase (Project Settings → Database → Connection string). `.env.example` is the template; `.env` is gitignored and must never be committed.
+Two variables, both from Supabase (Project Settings → Database → Connection string). **Nothing matching `.env*` is committed — not even an example file.** Get the values from Ashwin.
 
-Validated at import by `src/lib/env.ts`.
+Validated at import by `src/lib/env.ts`, so a missing or malformed URL fails immediately with a readable error.
 
 | Variable       | Port | Purpose                                     |
 | -------------- | ---- | ------------------------------------------- |
@@ -206,7 +206,8 @@ Repo: `Abhigna-Stayze/Stayze` — private, default branch `main`.
 - Routes, layouts and global styles under `src/app/`.
 - Schema changes via `prisma migrate dev` — **never `db push`**. Commit the migration with the schema.
 - `npm run typecheck` and `npm run lint` both pass before a commit.
-- Never commit `.env*` (`.env.example` is the one exception, and it holds placeholders only).
+- Never commit `.env*` — no exceptions, not even an example file.
+- Spec documents (`.docx`, `.pdf`, `.pptx`) stay in the parent workspace, never in this repo.
 - Regenerate the Prisma client after any schema change (`migrate dev` does this for you).
 
 ## State

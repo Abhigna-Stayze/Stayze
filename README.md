@@ -12,9 +12,10 @@ Customer portal for Stayze. Next.js (App Router), TypeScript, Tailwind CSS, Pris
 
 ```bash
 npm install               # postinstall generates the Prisma client
-cp .env.example .env      # then fill in the two connection strings
 npm run dev
 ```
+
+You need a `.env` with the two connection strings below. Nothing matching `.env*` is committed — ask Ashwin for the values.
 
 The app runs at http://localhost:3000.
 
@@ -22,14 +23,19 @@ The Prisma client is generated into `src/generated/prisma`, which is gitignored 
 
 ## Environment
 
-Two variables, both from Supabase (Project Settings → Database → Connection string). See [.env.example](.env.example).
+Two variables, both from Supabase (Project Settings → Database → Connection string):
 
 | Variable       | Port | Purpose                                                    |
 | -------------- | ---- | ---------------------------------------------------------- |
 | `DATABASE_URL` | 6543 | Pooled connection (PgBouncer). Used by the app at runtime. |
 | `DIRECT_URL`   | 5432 | Direct, unpooled connection. Migrations require this.      |
 
-`.env` is gitignored. Never commit it.
+```
+DATABASE_URL="postgresql://postgres.<ref>:<password>@<region>.pooler.supabase.com:6543/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://postgres.<ref>:<password>@<region>.pooler.supabase.com:5432/postgres"
+```
+
+Both are validated at import by [src/lib/env.ts](src/lib/env.ts). Never commit `.env`.
 
 ## Database
 
