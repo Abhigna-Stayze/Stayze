@@ -117,13 +117,15 @@ import { PrismaClient } from "@/generated/prisma/client";
 
 The `prisma-client` generator emits to `src/generated/prisma` (see the `output` in `schema.prisma`), so `@prisma/client` is the runtime dependency but not the import path. This import resolves and typechecks today — verified.
 
-**Prisma 7 has no zero-argument `PrismaClient` constructor.** `PrismaClientOptions` requires _either_ a driver adapter _or_ an Accelerate URL — `new PrismaClient()` will not compile. For Supabase Postgres the adapter is `@prisma/adapter-pg` (with `pg` and `@types/pg`), and the wiring lives in **`src/lib/db.ts`**:
+**Prisma 7 has no zero-argument `PrismaClient` constructor.** `PrismaClientOptions` requires _either_ a driver adapter _or_ an Accelerate URL — `new PrismaClient()` will not compile. For Supabase Postgres the adapter is `@prisma/adapter-pg` (with `pg` and `@types/pg`), and the wiring lives in **`src/lib/prisma.ts`**:
 
 ```ts
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/prisma";
 
-const users = await prisma.user.count();
+const stays = await prisma.stay.count();
 ```
+
+In practice you should not import this outside `src/services/` — see "Architecture".
 
 That module builds the client over the **pooled** `DATABASE_URL` — `DIRECT_URL` is for migrations only — and caches the instance on `globalThis` outside production, so Next's hot reload doesn't open a fresh connection pool on every edit.
 
@@ -227,9 +229,9 @@ The pooled/direct split is a Supabase requirement, not a preference: PgBouncer i
 One rule, and everything else follows from it: **the UI never talks to the database or to storage.**
 
 ```
-page / component
+client
       ↓
-server action / API route          (neither exists yet)
+src/app/api/**/route.ts            ← REST. Validates, calls a service, returns JSON.
       ↓
 src/services/*.service.ts          ← all database access lives here
       ↓
@@ -237,7 +239,9 @@ src/lib/prisma.ts
       ↓
 PostgreSQL
 
-page / component
+client
+      ↓
+src/app/api/upload/route.ts
       ↓
 src/lib/storage.ts                 ← the only door to Storage
       ↓
@@ -245,6 +249,8 @@ src/lib/supabase.ts
       ↓
 Supabase Storage
 ```
+
+**Server Actions are not used.** The decision (2026-07-12) is a REST API via Route Handlers, so the same endpoints can serve the website, a future mobile app, an admin dashboard, WhatsApp automation and AI integrations. Nothing is coupled to a React render.
 
 **Services return DTOs, not Prisma rows.** This is the part that looks like ceremony and is not. Two things break if you skip it:
 
@@ -254,6 +260,42 @@ Supabase Storage
 The DTOs are in `src/services/types.ts`. A useful example of why they earn their keep: `OwnerPublicView` simply **has no `phone` or `email` field**. Those columns are internal-ops only, and the type is what stops them reaching a component — a rule enforced by the compiler rather than remembered by a reviewer. In the same spirit, `booking.service.ts` withholds `caretakerPhone` until a booking is actually `CONFIRMED`, because reference codes are guessable and a caretaker's personal number is not ours to hand out.
 
 **`server-only` is load-bearing.** `env.ts`, `prisma.ts` and every service import it. If a client component ever imports one of them, the **build fails** instead of the service-role key being bundled into the browser. That is the intended behaviour — an import error here is the guard working, not a bug to route around.
+
+## The API
+
+`src/app/api/`. Routes are thin: validate with Zod, call a service, return. No route touches Prisma.
+
+| Method | Endpoint                    | Notes                                                                                              |
+| ------ | --------------------------- | -------------------------------------------------------------------------------------------------- |
+| GET    | `/api/stays`                | `?featured=true` `?tag=` (repeatable, AND) `?area=` `?minPrice=` `?maxPrice=` `?guests=` `?limit=` |
+| GET    | `/api/stays/[slug]`         | Full detail: images, rooms, experiences, amenities, owner                                          |
+| GET    | `/api/stays/[slug]/nearby`  |                                                                                                    |
+| GET    | `/api/stays/[slug]/reviews` | Published only                                                                                     |
+| GET    | `/api/stays/[slug]/related` |                                                                                                    |
+| GET    | `/api/guides`               | `?featured=true` `?category=` `?limit=`                                                            |
+| GET    | `/api/guides/[slug]`        | Body included                                                                                      |
+| GET    | `/api/reviews?stay=<slug>`  | Flat form of the nested route. `stay` is required.                                                 |
+| GET    | `/api/site`                 | Settings + tags + amenities, in one call                                                           |
+| POST   | `/api/booking`              | Returns `{ reference, whatsappUrl, estimatedTotal, nights }`                                       |
+| GET    | `/api/booking/[reference]`  | Trip timeline. Case-insensitive.                                                                   |
+| POST   | `/api/upload`               | multipart. **Requires `x-admin-key`.**                                                             |
+
+Every response uses the same envelope, so a client can branch on `success` without knowing the endpoint:
+
+```jsonc
+{ "success": true,  "data": … }
+{ "success": false, "error": { "message": "…", "issues": [{ "field": "adults", "message": "…" }] } }
+```
+
+Status codes: **200**, **201**, **400** (bad JSON, or a service rule like "sleeps 4, you asked for 9"), **401** (missing admin key), **404**, **409** (object already at that path), **413**, **415**, **422** (Zod), **500**, **502** (Storage down).
+
+**Raw Prisma errors are never returned.** They carry table, column and constraint names — a free schema dump for anyone probing the API. `src/lib/api.ts` logs them server-side and returns a generic 500. Keep it that way.
+
+**`POST /api/upload` is protected by a shared secret**, not real auth. It writes to Storage with the service-role key, so leaving it open would let anyone fill the buckets or overwrite a hero image. It requires an `x-admin-key` header matching `ADMIN_API_KEY`. With that variable unset it works in development and is **refused in production** — failing closed, because an unset secret must never mean "allow everyone". Replace this the moment auth lands.
+
+`POST /api/booking` is deliberately public and unauthenticated: it _is_ the booking flow. It is therefore also the obvious thing to spam — see "Known gaps".
+
+Upload returns the `{ bucket, path }` reference; it does **not** write it to a row. Attaching media to a Stay or a Review is a database write and the service layer has no function for it yet, so uploading and attaching are two calls.
 
 ## Storage
 
@@ -282,6 +324,8 @@ reviews/review-001/img-1.jpg
 
 Real, and worth handling before building on top of this:
 
+- **There is no rate limiting.** `POST /api/booking` is public, unauthenticated, and writes a row plus allocates a reference code on every call. Nothing stops a script creating ten thousand bookings. Vercel's firewall or an Upstash rate limit on the write endpoints is the cheap fix; do it before launch, not after.
+- **`ADMIN_API_KEY` is a stopgap, not auth.** One shared secret guards `POST /api/upload`. It has no identity, no audit trail and no revocation short of rotating the key. It is a floor, not a design — replace it when Supabase Auth lands.
 - **Nothing deletes storage objects.** Deleting a row cascades to its child rows, but never to the file in the bucket. Delete the object and the row together, or the buckets accumulate orphaned files. The seed re-uploads with `upsert`, so re-running it does not orphan anything — but application code will.
 - **The `reviews` bucket is public, and probably should not be.** Guests upload personal photos there. The other four hold marketing media and are fine public. Consider moving `reviews` to a private bucket with signed URLs before real guests upload anything.
 - **The seed is destructive and points at the only database.** `prisma/seed.ts` wipes all 21 tables before inserting. There is no separate dev database, so once real bookings exist, running it would delete them.
@@ -323,8 +367,8 @@ Repo: `Abhigna-Stayze/Stayze` — private, default branch `main`.
 
 ## State
 
-Scaffold, **Schema v1.1 migrated and live**, **seeded with development data**, and **a working backend data layer**.
+Scaffold, **Schema v1.1 migrated and live**, **seeded with development data**, **a working data layer**, and **a complete REST API**.
 
-The database holds 776 rows across all 21 tables and 75 objects across the five storage buckets. The service layer in `src/services/` reads and writes it, and every function has been driven against the live database — not just typechecked. Filters, private-field stripping, the caretaker-phone gate, `Decimal` conversion, weekend price overrides and the booking guards all behave. CI is green on `main`.
+The database holds 776 rows across all 21 tables and 75 objects across the five storage buckets. The service layer reads and writes it, and `src/app/api/` exposes it over REST. Both have been driven for real, not just typechecked: every endpoint was hit against the running server — 24 GET cases, the booking POST and its validation rules, the upload endpoint with its bucket allowlist, path-traversal guard, size and type caps, and the admin-key guard rejecting unauthenticated writes. Test rows and objects were cleaned up afterwards. CI is green on `main`.
 
-What does not exist yet: **any UI**. There is one placeholder route and no page that renders a single row. No server actions, no API routes, no auth, no admin surface. The data layer is finished and unused — the next step is the pages the Full Page Designs describe, starting with Home (featured stays) and Stay Detail, both of which have real data and a service call waiting for them.
+What does not exist yet: **any UI**. There is one placeholder route and no page that renders a single row. No auth, no admin surface. The API is finished and unused — the next step is the pages the Full Page Designs describe, starting with Home (featured stays) and Stay Detail, both of which have real data and an endpoint waiting for them.

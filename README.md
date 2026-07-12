@@ -56,6 +56,32 @@ page / component  →  src/lib/storage.ts  →  src/lib/supabase.ts  →  Supaba
 
 All database access goes through the service layer in [src/services/](src/services/). Services return DTOs, not Prisma rows — Prisma's `Decimal` cannot be passed to a client component, and a `bucket` + `path` pair is not a URL. [src/services/mappers.ts](src/services/mappers.ts) does both conversions in one place.
 
+## API
+
+A REST API under [src/app/api/](src/app/api/), built with Route Handlers. **Server Actions are not used** — the same endpoints serve the website, a future mobile app, an admin dashboard and WhatsApp automation.
+
+| Method | Endpoint                                                                             |
+| ------ | ------------------------------------------------------------------------------------ |
+| GET    | `/api/stays` · `?featured` `?tag` `?area` `?minPrice` `?maxPrice` `?guests` `?limit` |
+| GET    | `/api/stays/[slug]` · `/nearby` · `/reviews` · `/related`                            |
+| GET    | `/api/guides` · `/api/guides/[slug]`                                                 |
+| GET    | `/api/reviews?stay=<slug>`                                                           |
+| GET    | `/api/site`                                                                          |
+| POST   | `/api/booking` → `{ reference, whatsappUrl, estimatedTotal, nights }`                |
+| GET    | `/api/booking/[reference]`                                                           |
+| POST   | `/api/upload` — multipart, requires `x-admin-key`                                    |
+
+Every response uses one envelope:
+
+```jsonc
+{ "success": true,  "data": … }
+{ "success": false, "error": { "message": "…", "issues": [ … ] } }
+```
+
+Routes are thin: validate with Zod, call a service, return JSON. No route touches Prisma, and a raw Prisma error is never returned to a client — it would leak table and column names.
+
+`POST /api/upload` requires the `ADMIN_API_KEY` shared secret. With that variable unset it works in development and is refused in production; it fails closed on purpose.
+
 ## Database
 
 The schema is [prisma/schema.prisma](prisma/schema.prisma) — 21 models. Connection config lives in [prisma.config.ts](prisma.config.ts) rather than in the schema, which is why the `datasource` block carries no `url`.

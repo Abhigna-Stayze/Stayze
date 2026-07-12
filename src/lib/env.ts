@@ -26,6 +26,12 @@ const schema = z.object({
   // SECRET. Bypasses RLS entirely. Server-side writes and uploads only.
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
 
+  // Shared secret for the write endpoints (POST /api/upload). Optional, and
+  // deliberately so: unset, uploads work in development and are REFUSED in
+  // production, rather than silently exposing an open door to the buckets.
+  // Set it before deploying. This is a stopgap until real auth exists.
+  ADMIN_API_KEY: z.string().min(16).optional(),
+
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),

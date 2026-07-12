@@ -114,7 +114,15 @@ export async function uploadFile(
       cacheControl: String(options.cacheControlSeconds ?? 3600),
     });
 
-  if (error) throw new StorageError(`upload ${bucket}/${path}`, error.message);
+  if (error) {
+    // An object already sits at this path and upsert was not requested. That is
+    // a conflict the caller can act on (pick another path, or pass upsert), not
+    // a storage failure — so it gets its own type and, at the API edge, a 409.
+    if (/already exists|duplicate/i.test(error.message)) {
+      throw new StorageConflictError(`${bucket}/${path} already exists.`);
+    }
+    throw new StorageError(`upload ${bucket}/${path}`, error.message);
+  }
 
   return { bucket, path };
 }
@@ -210,5 +218,13 @@ export class StorageError extends Error {
   constructor(operation: string, detail?: string) {
     super(`Storage: ${operation}${detail ? ` — ${detail}` : ""}`);
     this.name = "StorageError";
+  }
+}
+
+/** An object already exists at that path. The caller's problem, not storage's. */
+export class StorageConflictError extends StorageError {
+  constructor(message: string) {
+    super(message);
+    this.name = "StorageConflictError";
   }
 }
