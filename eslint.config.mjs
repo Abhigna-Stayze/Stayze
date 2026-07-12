@@ -16,6 +16,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Prisma client is generated, not authored.
     "src/generated/**",
+    // Swagger UI assets, vendored out of node_modules by postinstall.
+    "public/swagger/**",
   ]),
 ]);
 

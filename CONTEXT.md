@@ -270,7 +270,9 @@ The DTOs are in `src/services/types.ts`. A useful example of why they earn their
 
 `src/app/api/`. Routes are thin: validate with Zod, call a service, return. No route touches Prisma.
 
-**Interactive docs: `/api/docs`.** The OpenAPI 3.1 spec is at `/api/openapi.json`, and `/api` itself redirects a browser to the docs (it is a folder, not an endpoint — without a `route.ts` it would be a bare 404 that reads like the API is broken).
+**Interactive docs: `/api/docs`** — Swagger UI. The OpenAPI 3.1 spec is at `/api/openapi.json`, and `/api` itself redirects a browser to the docs (it is a folder, not an endpoint — without a `route.ts` it would be a bare 404 that reads like the API is broken).
+
+Swagger UI is **served from this origin, not a CDN**: `scripts/copy-swagger.mjs` vendors the two assets out of `node_modules` into `public/swagger/` at `postinstall`. They are gitignored — generated output, same argument as the Prisma client. If the docs page 404s on its CSS, `npm install` (or `npm run postinstall`) is what puts them back.
 
 **The spec is generated, never hand-written.** `src/lib/openapi.ts` builds it from the same Zod schemas the API validates with, so it cannot drift from the implementation. Response shapes are pinned to the service DTOs by a compile-time check: change `StayCard` without changing its schema and `npm run typecheck` fails. That check is the only thing keeping the published docs honest — do not delete it to make an error go away.
 
@@ -287,7 +289,7 @@ Note the spec documents the **wire format**: services return `Date` objects, the
 | GET    | `/api/guides/[slug]`        | Body included                                                                                      |
 | GET    | `/api/reviews?stay=<slug>`  | Flat form of the nested route. `stay` is required.                                                 |
 | GET    | `/api/site`                 | Settings + tags + amenities, in one call                                                           |
-| GET    | `/api/docs`                 | Interactive reference (Scalar). `/api/openapi.json` is the spec.                                   |
+| GET    | `/api/docs`                 | Swagger UI. `/api/openapi.json` is the spec.                                                       |
 | POST   | `/api/booking`              | Returns `{ reference, whatsappUrl, estimatedTotal, nights }`. Rate limited: 5/IP/10 min.           |
 | GET    | `/api/booking/[reference]`  | Trip timeline. Case-insensitive.                                                                   |
 | POST   | `/api/upload`               | multipart. Uploads, and optionally attaches to a row. **`x-admin-key`.**                           |

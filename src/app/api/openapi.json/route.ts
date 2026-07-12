@@ -7,7 +7,7 @@ import { buildOpenApiDocument } from "@/lib/openapi";
  * The machine-readable contract. Generated from the same Zod schemas the API
  * validates with, so it cannot drift from the implementation.
  *
- * Point anything at this: Scalar (at /api/docs), Postman, an SDK generator,
+ * Point anything at this: Swagger UI (at /api/docs), Postman, an SDK generator,
  * or a mobile client's codegen step.
  */
 export async function GET() {

@@ -34,6 +34,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# Swagger UI assets — vendored from node_modules by postinstall, not tracked
+/public/swagger
+
 # spec documents live in the parent workspace, not in this repo
 *.docx
 *.pdf
