@@ -1,4 +1,5 @@
 import { created, parseBody, route } from "@/lib/api";
+import { BOOKING_LIMIT, rateLimit } from "@/lib/rate-limit";
 import { createBookingSchema } from "@/lib/schemas";
 import { createBookingRequest } from "@/services/booking.service";
 
@@ -23,11 +24,17 @@ import { createBookingRequest } from "@/services/booking.service";
  *   400  a rule the service enforces — unknown stay, more guests than it sleeps
  *
  * This endpoint is intentionally public and unauthenticated: it IS the booking
- * flow. It is therefore also the obvious thing to spam. See the rate-limiting
- * note in CONTEXT.md — there is none yet.
+ * flow. It is therefore also the obvious thing to spam, so it is rate limited
+ * to 5 per IP per 10 minutes — far above a real guest, far below a script.
+ * 429 with a Retry-After header once that is spent.
+ *
+ * That limiter is in-process, which makes it a speed bump rather than a wall on
+ * serverless. See src/lib/rate-limit.ts.
  */
 export async function POST(request: Request) {
   return route(async () => {
+    rateLimit(request, BOOKING_LIMIT);
+
     const body = await parseBody(createBookingSchema, request);
 
     const result = await createBookingRequest({

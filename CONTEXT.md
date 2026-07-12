@@ -46,16 +46,21 @@ Next.js is a settled founder decision (2026-07-03), recorded in the parent folde
 ```
 src/
   app/          App Router routes, layouts, global styles
+  app/api/      REST endpoints. Validate, call a service, return JSON.
   lib/
-    prisma.ts   The Prisma client singleton — import `prisma` from here
-    supabase.ts Supabase clients (browser + privileged admin)
-    storage.ts  The only door to Supabase Storage
-    env.ts      Zod-validated server environment
+    prisma.ts     The Prisma client singleton — import `prisma` from here
+    supabase.ts   Supabase clients (browser + privileged admin)
+    storage.ts    The only door to Supabase Storage
+    env.ts        Zod-validated server environment
+    api.ts        Response envelope, central error handling, admin guard
+    schemas.ts    Zod request schemas
+    rate-limit.ts In-process limiter for the public write endpoints
   services/     The data layer. All database access goes through here.
     stay.service.ts     Explore, Home, Stay Detail
     guide.service.ts    Travel guides
     booking.service.ts  WhatsApp booking + trip timeline
     site.service.ts     Site settings, tags, amenities, contact
+    media.service.ts    Keeps Postgres rows and Storage objects in step
     types.ts            DTOs the services return
     mappers.ts          Prisma row -> DTO (Decimal->number, ref->URL)
   generated/    Prisma client — generated, gitignored
@@ -276,9 +281,10 @@ The DTOs are in `src/services/types.ts`. A useful example of why they earn their
 | GET    | `/api/guides/[slug]`        | Body included                                                                                      |
 | GET    | `/api/reviews?stay=<slug>`  | Flat form of the nested route. `stay` is required.                                                 |
 | GET    | `/api/site`                 | Settings + tags + amenities, in one call                                                           |
-| POST   | `/api/booking`              | Returns `{ reference, whatsappUrl, estimatedTotal, nights }`                                       |
+| POST   | `/api/booking`              | Returns `{ reference, whatsappUrl, estimatedTotal, nights }`. Rate limited: 5/IP/10 min.           |
 | GET    | `/api/booking/[reference]`  | Trip timeline. Case-insensitive.                                                                   |
-| POST   | `/api/upload`               | multipart. **Requires `x-admin-key`.**                                                             |
+| POST   | `/api/upload`               | multipart. Uploads, and optionally attaches to a row. **`x-admin-key`.**                           |
+| DELETE | `/api/media/[type]/[id]`    | Removes the row **and** the storage object. **`x-admin-key`.**                                     |
 
 Every response uses the same envelope, so a client can branch on `success` without knowing the endpoint:
 
@@ -293,9 +299,20 @@ Status codes: **200**, **201**, **400** (bad JSON, or a service rule like "sleep
 
 **`POST /api/upload` is protected by a shared secret**, not real auth. It writes to Storage with the service-role key, so leaving it open would let anyone fill the buckets or overwrite a hero image. It requires an `x-admin-key` header matching `ADMIN_API_KEY`. With that variable unset it works in development and is **refused in production** — failing closed, because an unset secret must never mean "allow everyone". Replace this the moment auth lands.
 
-`POST /api/booking` is deliberately public and unauthenticated: it _is_ the booking flow. It is therefore also the obvious thing to spam — see "Known gaps".
+`POST /api/booking` is deliberately public and unauthenticated: it _is_ the booking flow. It is therefore also the obvious thing to spam, so it is rate limited to **5 per IP per 10 minutes** — far above a real guest, far below a script. Read the caveat in `src/lib/rate-limit.ts` before trusting it: the counter is in-process, so on serverless it is a speed bump, not a wall.
 
-Upload returns the `{ bucket, path }` reference; it does **not** write it to a row. Attaching media to a Stay or a Review is a database write and the service layer has no function for it yet, so uploading and attaching are two calls.
+### Media lifecycle
+
+**Postgres and Storage do not stay in step by themselves.** A cascade delete removes child ROWS and leaves the FILES in the bucket forever. `src/services/media.service.ts` is the only thing that changes both, and everything that touches media must go through it.
+
+`POST /api/upload` can attach in the same request — pass `target` (`stay-image`, `review-image`, `owner-photo`, `room-image`, `experience-image`, `nearby-image`, `guide-cover`) and `targetId`. **If the attach fails, the object just uploaded is deleted again.** Upload-then-attach as two calls is precisely what produces orphans: the first succeeds, the client dies, and the bucket keeps a file no row points at. Uploading with no `target` is still allowed and still orphans; pass one unless you have a reason not to.
+
+`DELETE /api/media/[type]/[id]` removes the row and the object together.
+
+Two invariants the service maintains, and code that bypasses it will break:
+
+- **A stay with images has exactly one hero.** Attaching with `isHero=true` demotes the incumbent, and deleting the hero promotes the next image by sort order. A stay with images and no hero renders from a fallback, which is a silent trap — the card looks fine until someone reorders the gallery and the picture changes for no visible reason.
+- **Replacing single-reference media repoints the row first, then deletes the old object** — and skips the delete when old and new paths are identical, which is what `upsert=true` produces. Get that wrong and you delete the file you just wrote.
 
 ## Storage
 
@@ -324,9 +341,9 @@ reviews/review-001/img-1.jpg
 
 Real, and worth handling before building on top of this:
 
-- **There is no rate limiting.** `POST /api/booking` is public, unauthenticated, and writes a row plus allocates a reference code on every call. Nothing stops a script creating ten thousand bookings. Vercel's firewall or an Upstash rate limit on the write endpoints is the cheap fix; do it before launch, not after.
+- **Rate limiting is in-process, so it is weak on serverless.** `POST /api/booking` is capped at 5/IP/10 min and `/api/upload` at 60, but the counter lives in one instance's memory. On Vercel each instance keeps its own, and instances come and go — an attacker spread across enough cold starts gets more than the limit implies. It raises the cost of casual abuse above zero, which is where we started. The real fix is a shared store: Vercel's firewall, or Upstash Redis keyed the same way. `src/lib/rate-limit.ts` is shaped so that swap touches one file.
 - **`ADMIN_API_KEY` is a stopgap, not auth.** One shared secret guards `POST /api/upload`. It has no identity, no audit trail and no revocation short of rotating the key. It is a floor, not a design — replace it when Supabase Auth lands.
-- **Nothing deletes storage objects.** Deleting a row cascades to its child rows, but never to the file in the bucket. Delete the object and the row together, or the buckets accumulate orphaned files. The seed re-uploads with `upsert`, so re-running it does not orphan anything — but application code will.
+- **Orphaned objects are still possible.** `media.service.ts` deletes the row and the object together, and a failed attach rolls the upload back — but an upload with no `target` that is never attached still leaves a file nobody points at. There is no sweeper that reconciles the buckets against the database.
 - **The `reviews` bucket is public, and probably should not be.** Guests upload personal photos there. The other four hold marketing media and are fine public. Consider moving `reviews` to a private bucket with signed URLs before real guests upload anything.
 - **The seed is destructive and points at the only database.** `prisma/seed.ts` wipes all 21 tables before inserting. There is no separate dev database, so once real bookings exist, running it would delete them.
 - **Schema v1.1 cuts scope the Developer Handoff lists as in-MVP.** Confirm with the founder before building around it, because §22 of that document makes it the contract:

@@ -155,6 +155,42 @@ export const uploadSchema = z.object({
     .transform((v) => v === "true"),
 });
 
+/**
+ * Optionally attach the uploaded object to a row, in the same request.
+ *
+ * Upload-then-attach as two calls is what produces orphans: the first succeeds,
+ * the client dies, and the bucket keeps a file no row points at. Doing both in
+ * one request lets the server clean up after itself if the attach fails.
+ *
+ * `target` selects the row type; `targetId` is the row's id, except for
+ * stay-image (the stay's SLUG) and guide-cover (the guide's SLUG), which are
+ * the identifiers a caller actually has to hand.
+ */
+export const attachTargets = [
+  "stay-image",
+  "review-image",
+  "owner-photo",
+  "room-image",
+  "experience-image",
+  "nearby-image",
+  "guide-cover",
+] as const;
+
+export type AttachTarget = (typeof attachTargets)[number];
+
+export const attachSchema = z.object({
+  target: z.enum(attachTargets),
+  targetId: z.string().min(1).max(200),
+  /** stay-image only. */
+  altText: z.string().max(300).optional(),
+  caption: z.string().max(300).optional(),
+  isHero: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true"),
+  sortOrder: numberFromQuery.int().nonnegative().optional(),
+});
+
 function startOfTodayUtc(): Date {
   const now = new Date();
   return new Date(

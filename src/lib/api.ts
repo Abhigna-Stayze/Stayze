@@ -2,7 +2,9 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { ZodError, type ZodType } from "zod";
 import { BookingError } from "@/services/booking.service";
+import { MediaError } from "@/services/media.service";
 import { StorageConflictError, StorageError } from "@/lib/storage";
+import { RateLimitError } from "@/lib/rate-limit";
 import { env } from "@/lib/env";
 
 /**
@@ -43,10 +45,11 @@ export function fail(
   message: string,
   status: number,
   issues?: FieldIssue[],
+  headers?: Record<string, string>,
 ): NextResponse<ApiFailure> {
   return NextResponse.json(
     { success: false, error: issues ? { message, issues } : { message } },
-    { status },
+    { status, headers },
   );
 }
 
@@ -70,6 +73,13 @@ export function route<T>(
 }
 
 function toErrorResponse(error: unknown): NextResponse<ApiFailure> {
+  // 429 — budget spent. Retry-After tells a well-behaved client when to return.
+  if (error instanceof RateLimitError) {
+    return fail(error.message, 429, undefined, {
+      "retry-after": String(error.retryAfterSeconds),
+    });
+  }
+
   // 401 — a write endpoint reached without the shared secret.
   if (error instanceof UnauthorizedError) {
     return fail(error.message, 401);
@@ -85,9 +95,10 @@ function toErrorResponse(error: unknown): NextResponse<ApiFailure> {
     return fail("Validation failed.", 422, toFieldIssues(error));
   }
 
-  // 400 — a rule the service enforces: too many guests, checkout before checkin.
-  // These messages are written for humans and are safe to surface.
-  if (error instanceof BookingError) {
+  // 400 — a rule the service enforces: too many guests, checkout before checkin,
+  // attaching media to a row that does not exist. These messages are written for
+  // humans and are safe to surface.
+  if (error instanceof BookingError || error instanceof MediaError) {
     return fail(error.message, 400);
   }
 

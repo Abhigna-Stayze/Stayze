@@ -60,16 +60,17 @@ All database access goes through the service layer in [src/services/](src/servic
 
 A REST API under [src/app/api/](src/app/api/), built with Route Handlers. **Server Actions are not used** — the same endpoints serve the website, a future mobile app, an admin dashboard and WhatsApp automation.
 
-| Method | Endpoint                                                                             |
-| ------ | ------------------------------------------------------------------------------------ |
-| GET    | `/api/stays` · `?featured` `?tag` `?area` `?minPrice` `?maxPrice` `?guests` `?limit` |
-| GET    | `/api/stays/[slug]` · `/nearby` · `/reviews` · `/related`                            |
-| GET    | `/api/guides` · `/api/guides/[slug]`                                                 |
-| GET    | `/api/reviews?stay=<slug>`                                                           |
-| GET    | `/api/site`                                                                          |
-| POST   | `/api/booking` → `{ reference, whatsappUrl, estimatedTotal, nights }`                |
-| GET    | `/api/booking/[reference]`                                                           |
-| POST   | `/api/upload` — multipart, requires `x-admin-key`                                    |
+| Method | Endpoint                                                                                        |
+| ------ | ----------------------------------------------------------------------------------------------- |
+| GET    | `/api/stays` · `?featured` `?tag` `?area` `?minPrice` `?maxPrice` `?guests` `?limit`            |
+| GET    | `/api/stays/[slug]` · `/nearby` · `/reviews` · `/related`                                       |
+| GET    | `/api/guides` · `/api/guides/[slug]`                                                            |
+| GET    | `/api/reviews?stay=<slug>`                                                                      |
+| GET    | `/api/site`                                                                                     |
+| POST   | `/api/booking` → `{ reference, whatsappUrl, estimatedTotal, nights }` · rate limited 5/IP/10min |
+| GET    | `/api/booking/[reference]`                                                                      |
+| POST   | `/api/upload` — multipart. Uploads, and optionally attaches to a row · `x-admin-key`            |
+| DELETE | `/api/media/[type]/[id]` — removes the row **and** the storage object · `x-admin-key`           |
 
 Every response uses one envelope:
 
@@ -81,6 +82,10 @@ Every response uses one envelope:
 Routes are thin: validate with Zod, call a service, return JSON. No route touches Prisma, and a raw Prisma error is never returned to a client — it would leak table and column names.
 
 `POST /api/upload` requires the `ADMIN_API_KEY` shared secret. With that variable unset it works in development and is refused in production; it fails closed on purpose.
+
+**Media:** Postgres holds `bucket` + `path`; Supabase Storage holds the bytes, and nothing keeps them in step by itself. [src/services/media.service.ts](src/services/media.service.ts) is the only thing that changes both. `POST /api/upload` can attach to a row in the same request (`target`, `targetId`) and rolls the upload back if the attach fails; `DELETE /api/media/[type]/[id]` removes the row and the object together.
+
+**Rate limiting** on `POST /api/booking` (5/IP/10 min) and `/api/upload` (60) is in-process — a speed bump, not a wall, on serverless. See [src/lib/rate-limit.ts](src/lib/rate-limit.ts).
 
 ## Database
 
