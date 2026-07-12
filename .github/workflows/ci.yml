@@ -10,10 +10,14 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # The build never opens a connection, but env.ts validates these at import.
-      # Well-formed placeholders are enough; real credentials are not needed.
+      # The build never opens a connection or uploads a file, but env.ts
+      # validates all of these at import. Well-formed placeholders are enough;
+      # real credentials are not needed and must never be put here.
       DATABASE_URL: postgresql://user:pass@localhost:6543/postgres?pgbouncer=true
       DIRECT_URL: postgresql://user:pass@localhost:5432/postgres
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder-publishable-key
+      SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
 
     steps:
       - uses: actions/checkout@v4

@@ -11,16 +11,20 @@ Three things that a fresh reader gets wrong by default. The repo's early history
 1. **Schema changes go through `npx prisma migrate dev`. Never `npx prisma db push`.**
    `db push` applies a schema with no migration file, leaving no history and no way to replay a change. It was used during initial setup, so you will see it in old commands and old commits — that is not the pattern to copy. Migrations are versioned and committed under `prisma/migrations/`.
 
-2. **Import the client from `@/lib/db`. Never construct one.**
+2. **Import the client from `@/lib/prisma`. Never construct one.**
 
    ```ts
-   import { prisma } from "@/lib/db";
+   import { prisma } from "@/lib/prisma";
    ```
 
-   `new PrismaClient()` does not compile: Prisma 7 requires a driver adapter argument. `src/lib/db.ts` supplies it and caches the instance across hot reloads.
+   `new PrismaClient()` does not compile: Prisma 7 requires a driver adapter argument. `src/lib/prisma.ts` supplies it and caches the instance across hot reloads. (This module was called `db.ts` until 2026-07-12.)
 
 3. **Generated types come from `@/generated/prisma/client`, not `@prisma/client`.**
    `@prisma/client` is the runtime dependency, but the generator writes to `src/generated/prisma`, so that is the import path.
+
+4. **`prisma generate` after every schema change.** `migrate dev` does not do it for you — see "Migrations" below.
+
+5. **Pages never touch Prisma or Supabase. Go through `src/services/`.** See "Architecture" below.
 
 ## Stack
 
@@ -42,7 +46,18 @@ Next.js is a settled founder decision (Ashwin, 2026-07-03), recorded in the pare
 ```
 src/
   app/          App Router routes, layouts, global styles
-  lib/db.ts     Prisma client instance — import from here
+  lib/
+    prisma.ts   The Prisma client singleton — import `prisma` from here
+    supabase.ts Supabase clients (browser + privileged admin)
+    storage.ts  The only door to Supabase Storage
+    env.ts      Zod-validated server environment
+  services/     The data layer. All database access goes through here.
+    stay.service.ts     Explore, Home, Stay Detail
+    guide.service.ts    Travel guides
+    booking.service.ts  WhatsApp booking + trip timeline
+    site.service.ts     Site settings, tags, amenities, contact
+    types.ts            DTOs the services return
+    mappers.ts          Prisma row -> DTO (Decimal->number, ref->URL)
   generated/    Prisma client — generated, gitignored
 prisma/
   schema.prisma Data model — Schema v1.1, 21 models
@@ -207,6 +222,39 @@ The first two are validated at import by `src/lib/env.ts`. The Supabase keys del
 
 The pooled/direct split is a Supabase requirement, not a preference: PgBouncer in transaction mode can't run the statements migrations need.
 
+## Architecture
+
+One rule, and everything else follows from it: **the UI never talks to the database or to storage.**
+
+```
+page / component
+      ↓
+server action / API route          (neither exists yet)
+      ↓
+src/services/*.service.ts          ← all database access lives here
+      ↓
+src/lib/prisma.ts
+      ↓
+PostgreSQL
+
+page / component
+      ↓
+src/lib/storage.ts                 ← the only door to Storage
+      ↓
+src/lib/supabase.ts
+      ↓
+Supabase Storage
+```
+
+**Services return DTOs, not Prisma rows.** This is the part that looks like ceremony and is not. Two things break if you skip it:
+
+- **`Decimal` cannot cross to a client component.** Price, coordinates and rating come out of Prisma as `Decimal` objects, and passing one into a client component throws at runtime. `src/services/mappers.ts` converts them to `number` in one place.
+- **`bucket` + `path` is not a URL.** Rows hold a storage reference; components need something to put in `src`. Services resolve it via `storage.ts`, so no page ever imports the Supabase client.
+
+The DTOs are in `src/services/types.ts`. A useful example of why they earn their keep: `OwnerPublicView` simply **has no `phone` or `email` field**. Those columns are internal-ops only, and the type is what stops them reaching a component — a rule enforced by the compiler rather than remembered by a reviewer. In the same spirit, `booking.service.ts` withholds `caretakerPhone` until a booking is actually `CONFIRMED`, because reference codes are guessable and a caretaker's personal number is not ours to hand out.
+
+**`server-only` is load-bearing.** `env.ts`, `prisma.ts` and every service import it. If a client component ever imports one of them, the **build fails** instead of the service-role key being bundled into the browser. That is the intended behaviour — an import error here is the guard working, not a bug to route around.
+
 ## Storage
 
 Five public buckets, created in the Supabase dashboard: **`stays`**, **`owners`**, **`reviews`**, **`guides`**, **`experiences`**.
@@ -275,8 +323,8 @@ Repo: `Abhigna-Stayze/Stayze` — private, default branch `main`.
 
 ## State
 
-Scaffold, a **working** database connection, **Schema v1.1 migrated and live**, and **the database fully seeded with development data**.
+Scaffold, **Schema v1.1 migrated and live**, **seeded with development data**, and **a working backend data layer**.
 
-`prisma/migrations/20260711174828_init/` is applied and all 21 tables are populated: 3 stays, 24 stay images, 15 reviews, 5 bookings, 540 availability rows — 776 rows in total, plus 75 objects across the five storage buckets. Verified end to end: a `bucket` + `path` row resolves through the Supabase SDK to a public URL that returns HTTP 200 with the exact dimensions and byte size recorded in Postgres. CI is green on `main`.
+The database holds 776 rows across all 21 tables and 75 objects across the five storage buckets. The service layer in `src/services/` reads and writes it, and every function has been driven against the live database — not just typechecked. Filters, private-field stripping, the caretaker-phone gate, `Decimal` conversion, weekend price overrides and the booking guards all behave. CI is green on `main`.
 
-What does not exist yet: **any application code at all**. There is one placeholder route and no page that reads a single row. Auth, the admin surface and real content are all still absent. The database is now ahead of the app — the next step is building the pages the Full Page Designs describe, starting with Home (featured stays) and Stay Detail, both of which now have real data behind them.
+What does not exist yet: **any UI**. There is one placeholder route and no page that renders a single row. No server actions, no API routes, no auth, no admin surface. The data layer is finished and unused — the next step is the pages the Full Page Designs describe, starting with Home (featured stays) and Stay Detail, both of which have real data and a service call waiting for them.
