@@ -47,6 +47,10 @@ src/
 prisma/
   schema.prisma Data model — Schema v1.1, 21 models
   migrations/   Migration history — committed, replayable
+  seed.ts       Development seed — wipes and repopulates every table
+  seed/
+    content.ts  The data itself: 3 stays, owners, guides, reviews…
+    media.ts    Downloads source images, uploads them to Supabase Storage
 public/
   brand/        Logo, wordmark, favicon and badge SVGs
 ```
@@ -126,7 +130,9 @@ npx prisma migrate reset --force     # dropped the placeholder User table
 npx prisma migrate dev --name init   # wrote prisma/migrations/ and applied it
 ```
 
-Verified afterwards against the live database, not just from CLI output: all 21 tables exist and are empty, `_prisma_migrations` has the one `init` row. `migrate dev` regenerates the client as a side effect, so no separate `generate` was needed.
+Verified afterwards against the live database, not just from CLI output: all 21 tables exist, `_prisma_migrations` has the one `init` row.
+
+**`migrate dev` does NOT regenerate the client.** This surprised us: after the migration, `src/generated/prisma` was still exporting the old placeholder `User` model, and the seed would not compile against it. Prisma 7 decoupled the two. **Run `npx prisma generate` yourself after every schema change** — `postinstall` only covers a fresh install, not an edit.
 
 **Two Prisma 7 surprises, both of which will bite you again:**
 
@@ -157,7 +163,24 @@ Installs the Supabase Postgres best-practices skill into `.agents/skills/`, with
 
 (The skill files _were_ committed briefly, in commit `0d0e073`, then removed. They remain in git history. They're public documentation from the Supabase repo — no secrets — so history was left alone rather than rewritten.)
 
-### 5. Tooling
+### 5. Seed data
+
+```bash
+npx prisma db seed          # wired via `migrations.seed` in prisma.config.ts
+```
+
+**Development data only.** Three stays (`CoffeeCharm`, `Mistwood Bungalow`, `Kaapi Nest`), 3 owners, 15 amenities, 10 tags, 6 travel guides, 15 reviews, 5 bookings across every `BookingStatus`, and 180 days of availability per stay — 776 rows and 75 storage objects in total. The places are real Chikmagalur locations (Mullayanagiri, Hebbe Falls, Aldur); the properties, owners, guests, prices and phone numbers are invented.
+
+**It wipes every table first**, so it is safe to re-run and dangerous to point at anything real. See "Known gaps".
+
+Two things worth knowing before you touch it:
+
+- **Images are uploaded, not faked.** `prisma/seed/media.ts` downloads from Wikimedia Commons (real, freely-licensed photographs of Chikmagalur — used for landscapes and nearby places) and Unsplash (interiors, portraits, food), then uploads to the five buckets and records the true `width`, `height`, `fileSize` and `mimeType`. Commons rate-limits: the downloader identifies itself with a User-Agent, paces distinct sources 500 ms apart, and backs off on a 429. Remove that and the seed fails partway through.
+- **Availability is deterministic.** A seeded PRNG, not `Math.random()`, so re-running produces identical data. Weekends get a 25% price override, festival dates 50%, roughly 7 days per stay are `BLOCKED`, and the nights taken by confirmed bookings are marked `BOOKED` — so the calendar agrees with `BookingRequest` instead of contradicting it.
+
+`ratingAvg` and `reviewCount` on `Stay` are denormalised with nothing maintaining them, so the seed computes both from the reviews it inserts. Application code that publishes a review must do the same.
+
+### 6. Tooling
 
 - **`postinstall` runs `prisma generate`.** Not optional: the generated client is gitignored, so without this any fresh clone, CI run or Vercel build fails at typecheck.
 - **Zod-validated env** in `src/lib/env.ts`. Import `env` from there, not `process.env`.
@@ -168,23 +191,52 @@ Installs the Supabase Postgres best-practices skill into `.agents/skills/`, with
 
 ## Environment
 
-Two variables, both from Supabase (Project Settings → Database → Connection string). **Nothing matching `.env*` is committed — not even an example file.** Get the values from Ashwin.
+All from Supabase. **Nothing matching `.env*` is committed — not even an example file.** Get the values from Ashwin.
 
-Validated at import by `src/lib/env.ts`, so a missing or malformed URL fails immediately with a readable error.
+| Variable                               | Purpose                                                                   |
+| -------------------------------------- | ------------------------------------------------------------------------- |
+| `DATABASE_URL`                         | Pooled connection, port 6543 (PgBouncer). App runtime.                    |
+| `DIRECT_URL`                           | Direct, unpooled, port 5432. Migrations and the seed require this.        |
+| `NEXT_PUBLIC_SUPABASE_URL`             | Project URL. Public by design — the browser needs it to build image URLs. |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Anon key. Public by design.                                               |
+| `SUPABASE_SERVICE_ROLE_KEY`            | **Secret.** Bypasses RLS. Seed/server only.                               |
 
-| Variable       | Port | Purpose                                     |
-| -------------- | ---- | ------------------------------------------- |
-| `DATABASE_URL` | 6543 | Pooled connection (PgBouncer). App runtime. |
-| `DIRECT_URL`   | 5432 | Direct, unpooled. Migrations require this.  |
+The first two are validated at import by `src/lib/env.ts`. The Supabase keys deliberately are **not** — CI supplies only the two database URLs, so requiring the others in `env.ts` would break the build. The seed reads them directly.
+
+> **Never prefix the service-role key with `NEXT_PUBLIC_`.** Next.js inlines every `NEXT_PUBLIC_*` variable into the JavaScript bundle sent to the browser. The service-role key bypasses Row Level Security completely, so a `NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY` hands every visitor full read/write access to the database. This was very nearly done on 2026-07-12 and caught before any build shipped. The project URL and the publishable key are fine to expose — they are designed for it. The service-role key is not.
 
 The pooled/direct split is a Supabase requirement, not a preference: PgBouncer in transaction mode can't run the statements migrations need.
+
+## Storage
+
+Five public buckets, created in the Supabase dashboard: **`stays`**, **`owners`**, **`reviews`**, **`guides`**, **`experiences`**.
+
+Postgres stores only `bucket` + `path`. The app resolves the URL at read time:
+
+```ts
+const { data } = supabase.storage.from(image.bucket).getPublicUrl(image.path);
+```
+
+Never store a full URL (it hardcodes the project ref into your data) and never store binary. Path convention, as the seed writes it:
+
+```
+stays/property-001/hero.jpg
+stays/property-001/gallery-1.jpg … gallery-7.jpg
+stays/property-001/rooms/estate-room.jpg
+stays/property-001/nearby/mullayanagiri.jpg
+experiences/property-001/morning-coffee-walk.jpg
+owners/owner-001/profile.jpg
+guides/2-day-chikmagalur-itinerary/cover.jpg
+reviews/review-001/img-1.jpg
+```
 
 ## Known gaps
 
 Real, and worth handling before building on top of this:
 
-- **Storage buckets do not exist yet.** The schema stores media as `bucket` + `path`, but the five buckets (`stays`, `owners`, `reviews`, `guides`, `experiences`) have not been created in Supabase Storage, and no upload path exists. Create them before wiring any media. Consider a private, signed-URL bucket for `reviews`, since guests upload personal photos there.
-- **Nothing deletes storage objects.** Deleting a row cascades to its child rows, but never to the file in the bucket. Delete the object and the row together, or the buckets accumulate orphaned files.
+- **Nothing deletes storage objects.** Deleting a row cascades to its child rows, but never to the file in the bucket. Delete the object and the row together, or the buckets accumulate orphaned files. The seed re-uploads with `upsert`, so re-running it does not orphan anything — but application code will.
+- **The `reviews` bucket is public, and probably should not be.** Guests upload personal photos there. The other four hold marketing media and are fine public. Consider moving `reviews` to a private bucket with signed URLs before real guests upload anything.
+- **The seed is destructive and points at the only database.** `prisma/seed.ts` wipes all 21 tables before inserting. There is no separate dev database, so once real bookings exist, running it would delete them.
 - **Schema v1.1 cuts scope the Developer Handoff lists as in-MVP.** Confirm with Ashwin before building around it, because §22 of that document makes it the contract:
   - **There is no `User` model — no auth, no accounts.** So `/login`, `/signup`, `/account`, `/account/saved` (wishlist collections) and `/admin` have no data model behind them, yet §19 lists all of them as MVP. The trip timeline sidesteps this: a guest returns via the `BookingRequest.reference` code rather than logging in. Wishlist collections and the admin back-office (§9, "not skippable") cannot be built on v1.1 as written.
   - **No standalone `Experience` model.** `StayExperience` is scoped to a single stay, so `/experiences` and `/experiences/[slug]` (§6.5) are unsupported.
@@ -223,8 +275,8 @@ Repo: `Abhigna-Stayze/Stayze` — private, default branch `main`.
 
 ## State
 
-Scaffold, a **working** database connection, and **Schema v1.1 migrated and live**.
+Scaffold, a **working** database connection, **Schema v1.1 migrated and live**, and **the database fully seeded with development data**.
 
-`src/lib/db.ts` queries the live Supabase Postgres instance — verified with a read, a write and a delete. `prisma/schema.prisma` holds the real 21-model Schema v1.1, and `prisma/migrations/20260711174828_init/` has been applied: all 21 tables exist in the database, all empty. CI is green on `main`.
+`prisma/migrations/20260711174828_init/` is applied and all 21 tables are populated: 3 stays, 24 stay images, 15 reviews, 5 bookings, 540 availability rows — 776 rows in total, plus 75 objects across the five storage buckets. Verified end to end: a `bucket` + `path` row resolves through the Supabase SDK to a public URL that returns HTTP 200 with the exact dimensions and byte size recorded in Postgres. CI is green on `main`.
 
-What does not exist yet: any application code that touches the client, the Supabase Storage buckets, auth, an admin surface, and any real content. One placeholder route, and nothing between it and the schema. The natural next steps are creating the storage buckets and seeding a first `Stay` end to end.
+What does not exist yet: **any application code at all**. There is one placeholder route and no page that reads a single row. Auth, the admin surface and real content are all still absent. The database is now ahead of the app — the next step is building the pages the Full Page Designs describe, starting with Home (featured stays) and Stay Detail, both of which now have real data behind them.
