@@ -1,67 +1,94 @@
 # Stayze
 
-Customer portal for Stayze. Next.js (App Router), TypeScript, Tailwind CSS, Prisma against a Supabase Postgres database.
+Customer portal for Stayze — a curated collection of homestays in Chikmagalur.
+
+Next.js 16 (App Router), TypeScript, Tailwind CSS v4, Prisma 7 against Supabase Postgres, with media in Supabase Storage.
 
 ## Requirements
 
-- Node.js 22 or newer (required by Prisma 7)
+- Node.js 22 or newer (Prisma 7 requires it)
 - npm
-- A Supabase project (Postgres)
+- A Supabase project
 
 ## Getting started
 
 ```bash
+cp .env.example .env      # then fill in the values
 npm install               # postinstall generates the Prisma client
 npm run dev
 ```
 
-You need a `.env` with the two connection strings below. Nothing matching `.env*` is committed — ask Ashwin for the values.
-
 The app runs at http://localhost:3000.
 
-The Prisma client is generated into `src/generated/prisma`, which is gitignored rather than committed — `postinstall` regenerates it on every `npm install`.
+To bring up a database from scratch:
+
+```bash
+npx prisma migrate deploy   # create the 21 tables
+npx prisma db seed          # development data — see "Seed data" below
+```
 
 ## Environment
 
-Two variables, both from Supabase (Project Settings → Database → Connection string):
+Copy `.env.example` and fill it in from the Supabase dashboard. `.env` is gitignored and must never be committed.
 
-| Variable       | Port | Purpose                                                    |
-| -------------- | ---- | ---------------------------------------------------------- |
-| `DATABASE_URL` | 6543 | Pooled connection (PgBouncer). Used by the app at runtime. |
-| `DIRECT_URL`   | 5432 | Direct, unpooled connection. Migrations require this.      |
+| Variable                               | Purpose                                                                |
+| -------------------------------------- | ---------------------------------------------------------------------- |
+| `DATABASE_URL`                         | Pooled connection, port 6543 (PgBouncer). App runtime.                 |
+| `DIRECT_URL`                           | Direct, unpooled, port 5432. Migrations and the seed.                  |
+| `NEXT_PUBLIC_SUPABASE_URL`             | Project URL. Public by design — the browser builds image URLs with it. |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Anon key. Public by design.                                            |
+| `SUPABASE_SERVICE_ROLE_KEY`            | **Secret.** Bypasses Row Level Security. Server-side only.             |
+
+The pooled/direct split is a Supabase requirement, not a preference: PgBouncer in transaction mode cannot run the statements a migration needs.
+
+> **Never prefix the service-role key with `NEXT_PUBLIC_`.** Next.js inlines every `NEXT_PUBLIC_*` variable into the JavaScript bundle it sends to the browser. That key bypasses RLS, so a `NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY` would hand every visitor full read/write access to the database.
+
+The environment is validated at import by [src/lib/env.ts](src/lib/env.ts), which is `server-only` — a client component that imports it fails the build rather than leaking a key.
+
+## Architecture
+
+One rule: **the UI never talks to the database or to storage.**
 
 ```
-DATABASE_URL="postgresql://postgres.<ref>:<password>@<region>.pooler.supabase.com:6543/postgres?pgbouncer=true"
-DIRECT_URL="postgresql://postgres.<ref>:<password>@<region>.pooler.supabase.com:5432/postgres"
+page / component  →  server action / API route  →  src/services/  →  src/lib/prisma.ts  →  PostgreSQL
+page / component  →  src/lib/storage.ts  →  src/lib/supabase.ts  →  Supabase Storage
 ```
 
-Both are validated at import by [src/lib/env.ts](src/lib/env.ts). Never commit `.env`.
+All database access goes through the service layer in [src/services/](src/services/). Services return DTOs, not Prisma rows — Prisma's `Decimal` cannot be passed to a client component, and a `bucket` + `path` pair is not a URL. [src/services/mappers.ts](src/services/mappers.ts) does both conversions in one place.
 
 ## Database
 
-Prisma is the ORM; the schema is [prisma/schema.prisma](prisma/schema.prisma). Connection config lives in [prisma.config.ts](prisma.config.ts) rather than in the schema itself, which is why the `datasource` block carries no `url`.
+The schema is [prisma/schema.prisma](prisma/schema.prisma) — 21 models. Connection config lives in [prisma.config.ts](prisma.config.ts) rather than in the schema, which is why the `datasource` block carries no `url`.
 
 ```bash
-npx prisma migrate dev --name <change>   # apply a schema change + write the migration
-npx prisma generate                      # regenerate the client (migrate dev does this too)
+npx prisma migrate dev --name <change>   # apply a schema change and write the migration
+npx prisma generate                      # regenerate the client — required after any change
 npx prisma studio                        # browse the data
 ```
 
-**Use `migrate dev`. Do not use `prisma db push`.** `db push` applies a schema with no migration file, leaving no history and nothing to replay. It was used during initial setup, so it appears in old commits — that is not the pattern to follow. Migrations live in `prisma/migrations/` and are committed with the schema.
+**Use `migrate dev`, never `prisma db push`.** `db push` applies a schema with no migration file, leaving no history and nothing to replay. Migrations live in `prisma/migrations/` and are committed alongside the schema.
 
-The first migration has not been created yet — see the Migrations section of [CONTEXT.md](CONTEXT.md) for the two commands that get there.
+**`migrate dev` does not regenerate the client.** Prisma 7 decoupled the two — run `prisma generate` yourself after every schema change, or the generated types will quietly describe the old schema.
 
-### Querying
+Import the client from [src/lib/prisma.ts](src/lib/prisma.ts) and never construct a `PrismaClient`: a second instance means a second connection pool. In practice a page should not import it at all — use a service.
 
-Import the client from [src/lib/db.ts](src/lib/db.ts) — never construct a `PrismaClient` directly:
+## Storage
 
-```ts
-import { prisma } from "@/lib/db";
+Media lives in Supabase Storage across five buckets: `stays`, `owners`, `reviews`, `guides`, `experiences`.
 
-const users = await prisma.user.count();
+**Postgres stores only a reference — `bucket` + `path` — never a URL and never binary.** The public URL is derived at read time. That keeps the project ref out of the database and makes a future move to a CDN a config change rather than a data migration.
+
+Every storage operation goes through [src/lib/storage.ts](src/lib/storage.ts). No page or component talks to Supabase Storage directly.
+
+## Seed data
+
+```bash
+npx prisma db seed
 ```
 
-That module wires the client to the pooled connection through `@prisma/adapter-pg` (Prisma 7 requires a driver adapter) and reuses a single instance across hot reloads in development.
+Development data only: three Chikmagalur stays with owners, rooms, experiences, nearby places, reviews, travel guides, bookings and 180 days of availability — plus the images, which are uploaded to Storage rather than faked. The locations are real; the properties, owners, guests and prices are invented.
+
+**The seed wipes every table before inserting.** Safe to re-run, and dangerous to point at a database holding real bookings.
 
 ## Scripts
 
@@ -75,35 +102,32 @@ That module wires the client to the pooled connection through `@prisma/adapter-p
 | `npm run format`       | Format with Prettier              |
 | `npm run format:check` | Check formatting without writing  |
 
-`postinstall` runs `prisma generate` automatically, so the client is always present after `npm install`.
+`postinstall` runs `prisma generate`, so the client is present after every `npm install`. It is generated into `src/generated/prisma`, which is gitignored rather than committed.
 
-CI (`.github/workflows/ci.yml`) runs format-check, lint, typecheck and build on every push to `main` and every pull request.
+CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs format-check, lint, typecheck and build on every push to `main` and every pull request.
 
 ## Project structure
 
 ```
 src/
   app/          App Router routes, layouts and global styles
-  lib/db.ts     Prisma client instance — import from here
+  lib/
+    prisma.ts   Prisma client singleton
+    supabase.ts Supabase clients (browser + privileged admin)
+    storage.ts  The only door to Supabase Storage
+    env.ts      Zod-validated server environment
+  services/     The data layer — all database access goes through here
   generated/    Prisma client (generated, gitignored)
 prisma/
   schema.prisma Data model
+  migrations/   Migration history
+  seed.ts       Development seed
 public/
   brand/        Logo, wordmark, favicon and badge SVGs
 ```
 
 The `@/*` path alias maps to `src/*`.
 
-## Agent skills
+## Further reading
 
-The Supabase Postgres best-practices skill is a local development aid and is **not committed** — `.agents/`, `.claude/` and `skills-lock.json` are all gitignored. Set it up on a new machine with:
-
-```bash
-npx skills add supabase/agent-skills
-```
-
-## Context
-
-[CONTEXT.md](CONTEXT.md) — how the project is set up, the commit identity this repo expects, known gaps, and what to do next. Read it before picking up work.
-
-Business context (brand, model, operations, open items) lives in the parent workspace folder, not in this repo.
+[CONTEXT.md](CONTEXT.md) — how the project is set up, why it is set up that way, known gaps, and what to do next. Read it before picking up work.

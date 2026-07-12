@@ -30,8 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files — including .env.example. Kept local, not committed.
+# env files. .env.example is the one exception — it holds placeholders only.
 .env*
+!.env.example
 
 # spec documents live in the parent workspace, not in this repo
 *.docx

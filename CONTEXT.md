@@ -206,7 +206,7 @@ Two things worth knowing before you touch it:
 
 ## Environment
 
-All from Supabase. **Nothing matching `.env*` is committed — not even an example file.** Get the values from Ashwin.
+All from Supabase. Copy **`.env.example`** to `.env` and fill it in from the dashboard. `.env.example` is the one env file that is committed — it holds placeholders only. `.env` itself never is.
 
 | Variable                               | Purpose                                                                   |
 | -------------------------------------- | ------------------------------------------------------------------------- |
@@ -315,7 +315,7 @@ Repo: `Abhigna-Stayze/Stayze` — private, default branch `main`.
 - Routes, layouts and global styles under `src/app/`.
 - Schema changes via `prisma migrate dev` — **never `db push`**. Commit the migration with the schema.
 - `npm run typecheck` and `npm run lint` both pass before a commit.
-- Never commit `.env*` — no exceptions, not even an example file.
+- Never commit `.env`. `.env.example` is the sole exception, and it holds placeholders only — keep it in step with `src/lib/env.ts` when a variable is added.
 - Spec documents (`.docx`, `.pdf`, `.pptx`) stay in the parent workspace, never in this repo.
 - Regenerate the Prisma client after any schema change (`migrate dev` does this for you).
 - **Update this file in the same commit as the change it describes.** A stale `CONTEXT.md` is the one failure mode that makes every other convention here useless. If a step is now done, say it is done; if a command no longer works, fix the command.
