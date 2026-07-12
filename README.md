@@ -60,6 +60,10 @@ All database access goes through the service layer in [src/services/](src/servic
 
 A REST API under [src/app/api/](src/app/api/), built with Route Handlers. **Server Actions are not used** — the same endpoints serve the website, a future mobile app, an admin dashboard and WhatsApp automation.
 
+**Interactive docs: [`/api/docs`](http://localhost:3000/api/docs)** · spec: `/api/openapi.json`
+
+The spec is generated from the same Zod schemas the API validates with ([src/lib/openapi.ts](src/lib/openapi.ts)), so it cannot drift. Response shapes are pinned to the service DTOs by a compile-time check — change a DTO without changing its schema and `npm run typecheck` fails.
+
 | Method | Endpoint                                                                                        |
 | ------ | ----------------------------------------------------------------------------------------------- |
 | GET    | `/api/stays` · `?featured` `?tag` `?area` `?minPrice` `?maxPrice` `?guests` `?limit`            |

@@ -270,6 +270,12 @@ The DTOs are in `src/services/types.ts`. A useful example of why they earn their
 
 `src/app/api/`. Routes are thin: validate with Zod, call a service, return. No route touches Prisma.
 
+**Interactive docs: `/api/docs`.** The OpenAPI 3.1 spec is at `/api/openapi.json`, and `/api` itself redirects a browser to the docs (it is a folder, not an endpoint — without a `route.ts` it would be a bare 404 that reads like the API is broken).
+
+**The spec is generated, never hand-written.** `src/lib/openapi.ts` builds it from the same Zod schemas the API validates with, so it cannot drift from the implementation. Response shapes are pinned to the service DTOs by a compile-time check: change `StayCard` without changing its schema and `npm run typecheck` fails. That check is the only thing keeping the published docs honest — do not delete it to make an error go away.
+
+Note the spec documents the **wire format**: services return `Date` objects, the API sends ISO strings, and `Jsonify<T>` in `openapi.ts` is what reconciles the two.
+
 | Method | Endpoint                    | Notes                                                                                              |
 | ------ | --------------------------- | -------------------------------------------------------------------------------------------------- |
 | GET    | `/api/stays`                | `?featured=true` `?tag=` (repeatable, AND) `?area=` `?minPrice=` `?maxPrice=` `?guests=` `?limit=` |
@@ -281,6 +287,7 @@ The DTOs are in `src/services/types.ts`. A useful example of why they earn their
 | GET    | `/api/guides/[slug]`        | Body included                                                                                      |
 | GET    | `/api/reviews?stay=<slug>`  | Flat form of the nested route. `stay` is required.                                                 |
 | GET    | `/api/site`                 | Settings + tags + amenities, in one call                                                           |
+| GET    | `/api/docs`                 | Interactive reference (Scalar). `/api/openapi.json` is the spec.                                   |
 | POST   | `/api/booking`              | Returns `{ reference, whatsappUrl, estimatedTotal, nights }`. Rate limited: 5/IP/10 min.           |
 | GET    | `/api/booking/[reference]`  | Trip timeline. Case-insensitive.                                                                   |
 | POST   | `/api/upload`               | multipart. Uploads, and optionally attaches to a row. **`x-admin-key`.**                           |
