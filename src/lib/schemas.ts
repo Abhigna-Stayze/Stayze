@@ -68,7 +68,50 @@ export const guideQuerySchema = z.object({
 export const reviewQuerySchema = z.object({
   /** Reviews are always scoped to a stay — there is no global review feed. */
   stay: slugSchema,
+  /**
+   * Include unpublished reviews — the moderation queue. Admin only; the route
+   * enforces that. Without it, only published reviews come back.
+   */
+  includeUnpublished: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true"),
 });
+
+export const reviewSourceSchema = z.enum(["DIRECT", "AIRBNB", "GOOGLE", "MMT"]);
+
+/** Ratings are whole stars. 4.5 is not a rating a guest can give. */
+const ratingSchema = z.number().int().min(1).max(5);
+
+export const createReviewSchema = z.object({
+  staySlug: slugSchema,
+  guestName: z.string().trim().min(2).max(100),
+  rating: ratingSchema,
+  title: z.string().trim().max(200).optional().nullable(),
+  comment: z.string().trim().min(1).max(5000),
+  stayedOn: z.coerce.date().optional().nullable(),
+  source: reviewSourceSchema,
+  /** Defaults to false — moderate before it counts towards the rating. */
+  isPublished: z.boolean().optional(),
+});
+
+/**
+ * Edit, publish or unpublish. All three are the same operation: a field
+ * changes, and the stay's rating is recomputed.
+ */
+export const updateReviewSchema = z
+  .object({
+    guestName: z.string().trim().min(2).max(100).optional(),
+    rating: ratingSchema.optional(),
+    title: z.string().trim().max(200).optional().nullable(),
+    comment: z.string().trim().min(1).max(5000).optional(),
+    stayedOn: z.coerce.date().optional().nullable(),
+    source: reviewSourceSchema.optional(),
+    isPublished: z.boolean().optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, {
+    message: "Provide at least one field to update.",
+  });
 
 // --- Booking ---------------------------------------------------------------
 

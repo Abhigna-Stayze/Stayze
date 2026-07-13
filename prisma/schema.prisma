@@ -140,8 +140,15 @@ model Stay {
   caretakerName  String? /// "Ramu" — named, never "staff"
   caretakerPhone String? /// PRIVATE. Only revealed on the Trip Timeline after booking
 
-  ratingAvg   Decimal? @db.Decimal(3, 2) /// Denormalised from Review for fast cards
+  /// Denormalised from Review. Nothing in Postgres maintains these — the review
+  /// service recomputes them on every publish, edit, unpublish and delete.
+  /// Never write them by hand.
+  ratingAvg   Decimal? @db.Decimal(3, 2)
   reviewCount Int      @default(0)
+
+  /// Free text, shown on the stay page. Cancellation is recorded, not enforced:
+  /// there is no payment, so there is nothing to refund automatically.
+  cancellationPolicy String? @db.Text
 
   isFeatured    Boolean @default(false) /// Drives Home "Featured Stays"
   featuredOrder Int? /// Manual ordering on Home
@@ -260,21 +267,52 @@ model StayHighlight {
   @@index([stayId])
 }
 
-/// "What you'll experience" — per stay (coffee walk, campfire, estate tour).
+/// A destination experience — a coffee estate tour, a sunrise trek, a
+/// plantation walk. Owns its own page and its own SEO.
+///
+/// Distinct from the old per-stay experience: the SAME experience can be
+/// offered at several stays, which is what makes it worth a URL of its own.
+model Experience {
+  id      String  @id @default(cuid())
+  title   String /// "Coffee Estate Tour"
+  slug    String  @unique /// /experiences/coffee-estate-tour
+  story   String  @db.Text /// The long narrative on the experience page
+  excerpt String? /// Short pull-quote for cards
+
+  bucket String? @default("experiences") /// Supabase bucket
+  path   String? /// path inside the bucket
+
+  metaTitle       String?
+  metaDescription String?
+  isPublished     Boolean @default(false) /// Moderate before showing
+
+  stays StayExperience[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isPublished])
+}
+
+/// Which experiences a stay offers. A junction table — the content lives on
+/// Experience now, not here.
+///
+/// This model used to hold the title, description and image itself, one row
+/// per stay. Those columns moved to Experience in the 2026-07-13 migration,
+/// which backfilled an Experience row per distinct title and relinked them.
+/// `sortOrder` stays here because the ordering is genuinely per-stay.
 model StayExperience {
-  id     String @id @default(cuid())
-  stayId String
-  stay   Stay   @relation(fields: [stayId], references: [id], onDelete: Cascade)
+  stayId       String
+  experienceId String
 
-  title       String /// "Morning coffee walk"
-  description String?
+  stay       Stay       @relation(fields: [stayId], references: [id], onDelete: Cascade)
+  experience Experience @relation(fields: [experienceId], references: [id], onDelete: Cascade)
 
-  imageBucket String? @default("experiences") /// Supabase bucket
-  imagePath   String? /// path inside the bucket
+  sortOrder Int @default(0)
 
-  sortOrder Int
-
+  @@id([stayId, experienceId])
   @@index([stayId])
+  @@index([experienceId])
 }
 
 /// Must-visit places AROUND THIS STAY. Scoped to one stay — there is no
@@ -441,6 +479,13 @@ model BookingRequest {
 
   status BookingStatus
   source String        @default("WEBSITE")
+
+  /// Recorded, not enforced. Cancellation logic is deliberately NOT implemented:
+  /// booking is a WhatsApp conversation with no payment, so cancelling is a
+  /// human deciding it is cancelled. These columns exist so that decision can be
+  /// written down. Setting them does not change `status` — do both, or neither.
+  cancelledAt        DateTime?
+  cancellationReason String?   @db.Text
 
   timeline TripTimelineStep[] /// Created when status → CONFIRMED
 

@@ -6,11 +6,12 @@ import {
   toExperience,
   toNearbyPlace,
   toOwnerPublic,
-  toReview,
+  toReviews,
   toRoom,
   toStayCard,
   toStayImage,
 } from "@/services/mappers";
+import { getReviewsForStay } from "@/services/review.service";
 import type {
   AvailabilityDay,
   NearbyPlaceView,
@@ -146,7 +147,10 @@ export async function getStayBySlug(slug: string): Promise<StayDetail | null> {
       images: { orderBy: { sortOrder: "asc" } },
       rooms: { orderBy: { sortOrder: "asc" } },
       highlights: { orderBy: { sortOrder: "asc" } },
-      experiences: { orderBy: { sortOrder: "asc" } },
+      experiences: {
+        orderBy: { sortOrder: "asc" },
+        include: { experience: true },
+      },
       nearbyPlaces: { orderBy: { sortOrder: "asc" } },
       amenities: { include: { amenity: true } },
       tags: { include: { tag: true } },
@@ -159,6 +163,10 @@ export async function getStayBySlug(slug: string): Promise<StayDetail | null> {
   });
 
   if (!stay) return null;
+
+  // Guest photos are in a private bucket, so signing is a network call. One
+  // batched call for every review on the page, not one per photo.
+  const reviews = await toReviews(stay.reviews);
 
   return {
     ...toStayCard(stay),
@@ -173,12 +181,16 @@ export async function getStayBySlug(slug: string): Promise<StayDetail | null> {
     checkOutTime: stay.checkOutTime,
     inspectedOn: stay.inspectedOn,
     inspectedBy: stay.inspectedBy,
+    cancellationPolicy: stay.cancellationPolicy,
     metaTitle: stay.metaTitle,
     metaDescription: stay.metaDescription,
     owner: toOwnerPublic(stay.owner),
     images: stay.images.map(toStayImage),
     rooms: stay.rooms.map(toRoom),
-    experiences: stay.experiences.map(toExperience),
+    // Only surface experiences that are themselves published.
+    experiences: stay.experiences
+      .filter((link) => link.experience.isPublished)
+      .map(toExperience),
     nearbyPlaces: stay.nearbyPlaces.map(toNearbyPlace),
     amenities: stay.amenities.map((a) => ({
       id: a.amenity.id,
@@ -186,7 +198,7 @@ export async function getStayBySlug(slug: string): Promise<StayDetail | null> {
       icon: a.amenity.icon,
       category: a.amenity.category,
     })),
-    reviews: stay.reviews.map(toReview),
+    reviews,
   };
 }
 
@@ -206,15 +218,14 @@ export async function getNearbyPlaces(
   return places.map(toNearbyPlace);
 }
 
-/** Published reviews for a stay, most recent stay date first. */
+/**
+ * Published reviews for a stay, most recent stay date first.
+ *
+ * Delegates to the review service, which owns reviews and the denormalised
+ * rating that hangs off them. Kept here so existing callers do not break.
+ */
 export async function getStayReviews(stayId: string): Promise<ReviewView[]> {
-  const reviews = await prisma.review.findMany({
-    where: { stayId, isPublished: true },
-    orderBy: { stayedOn: "desc" },
-    include: { images: true },
-  });
-
-  return reviews.map(toReview);
+  return getReviewsForStay(stayId);
 }
 
 /**

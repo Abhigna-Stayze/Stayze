@@ -109,7 +109,9 @@ Import the client from [src/lib/prisma.ts](src/lib/prisma.ts) and never construc
 
 ## Storage
 
-Media lives in Supabase Storage across five buckets: `stays`, `owners`, `reviews`, `guides`, `experiences`.
+Media lives in Supabase Storage across five buckets: `stays`, `owners`, `guides`, `experiences` are **public**; **`reviews` is private**.
+
+Guest review photos are reached through short-lived **signed URLs**, not public ones — a guest's holiday photo is not marketing media, and a public URL to one is permanent. `getPublicUrl()` throws for a private bucket rather than handing back a link that 400s. Signed URLs expire: never cache or store them.
 
 **Postgres stores only a reference — `bucket` + `path` — never a URL and never binary.** The public URL is derived at read time. That keeps the project ref out of the database and makes a future move to a CDN a config change rather than a data migration.
 

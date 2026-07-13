@@ -137,6 +137,8 @@ The rest of the time there is very little to do, which is the point. The veranda
     verification: "VERIFIED",
     caretakerName: "Ramu",
     caretakerPhone: "+91 98450 11223",
+    cancellationPolicy:
+      "Free cancellation up to 7 days before check-in. Within 7 days we will try to rebook the dates; if we can, there is no charge. Nothing is taken up front, so a cancellation is a message, not a refund.",
     isFeatured: true,
     featuredOrder: 1,
     metaTitle: "CoffeeCharm — Coffee Estate Stay in Mallandur, Chikmagalur",
@@ -407,6 +409,8 @@ The 5.5 acres around the house are coffee and pepper, still worked. Suresh will 
     verification: "VERIFIED",
     caretakerName: "Shivanna",
     caretakerPhone: "+91 98861 40337",
+    cancellationPolicy:
+      "Free cancellation up to 14 days before check-in — the house is booked whole, so a late cancellation is hard to fill. Within 14 days, talk to us; we have never charged anyone who had a real reason.",
     isFeatured: true,
     featuredOrder: 2,
     metaTitle: "Mistwood Bungalow — Heritage Plantation Stay in Chikmagalur",
@@ -680,6 +684,8 @@ This is the cheapest thing Stayze lists and it is on the list because of what it
     verification: "VERIFIED",
     caretakerName: "Manjunath",
     caretakerPhone: "+91 99012 88461",
+    cancellationPolicy:
+      "Free cancellation up to 48 hours before check-in. It is one small cottage and it rebooks easily, so we would rather you came another time than felt trapped into coming now.",
     isFeatured: true,
     featuredOrder: 3,
     metaTitle: "Kaapi Nest — Workation Cottage near Aldur, Chikmagalur",

@@ -36,7 +36,8 @@ import {
  * Optionally, attach it to a row in the same request:
  *   target    stay-image | review-image | owner-photo | room-image |
  *             experience-image | nearby-image | guide-cover
- *   targetId  the row's id — except stay-image and guide-cover, which take a SLUG
+ *   targetId  the row's id — except stay-image, guide-cover and experience-image,
+ *             which take a SLUG
  *   altText, caption, isHero, sortOrder   (stay-image only)
  *
  * 201 -> { bucket, path, publicUrl, size, contentType, attached? }
@@ -192,6 +193,8 @@ async function attachToRow(
       return { ok: true };
 
     case "experience-image":
+      // targetId is the experience's SLUG — the image lives on the standalone
+      // Experience now, and StayExperience is a junction with no id of its own.
       await setExperienceImage(attach.targetId, ref);
       return { ok: true };
 

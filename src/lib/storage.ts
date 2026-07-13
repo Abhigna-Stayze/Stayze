@@ -23,6 +23,28 @@ export const BUCKETS = [
 
 export type Bucket = (typeof BUCKETS)[number];
 
+/**
+ * Buckets whose objects are NOT world-readable.
+ *
+ * `reviews` holds photographs guests took on holiday. The other four hold
+ * marketing media we publish on purpose. A guest's photo is not marketing
+ * media, and a public URL to one is permanent, unguessable-only-by-obscurity,
+ * and impossible to take back once it has been indexed.
+ *
+ * So the bucket is private in Supabase and objects are reached through
+ * short-lived signed URLs. `getPublicUrl` THROWS for these rather than
+ * returning a link that 400s — a broken image is a bug you notice; a link that
+ * silently exposes a guest's photo is one you do not.
+ */
+export const PRIVATE_BUCKETS = new Set<string>(["reviews"]);
+
+export function isPrivateBucket(bucket: string): boolean {
+  return PRIVATE_BUCKETS.has(bucket);
+}
+
+/** How long a signed review URL lives. Long enough to render a page, no longer. */
+export const SIGNED_URL_TTL_SECONDS = 60 * 60;
+
 /** A stored object, exactly as Postgres holds it. */
 export type MediaRef = {
   bucket: string;
@@ -55,6 +77,15 @@ export type UploadOptions = {
  * call on the server and in the browser.
  */
 export function getPublicUrl(ref: MediaRef): string {
+  if (isPrivateBucket(ref.bucket)) {
+    // Deliberately fatal. Returning a public URL for a private object gives you
+    // a link that 400s — or worse, one that works because someone flipped the
+    // bucket back. Use getSignedUrl / signRefs instead.
+    throw new StorageError(
+      `"${ref.bucket}" is a private bucket. Use a signed URL, not a public one.`,
+    );
+  }
+
   const { data } = supabaseBrowser.storage
     .from(ref.bucket)
     .getPublicUrl(ref.path);
@@ -73,13 +104,12 @@ export function getPublicUrlOrNull(ref: MaybeMediaRef): string | null {
 /**
  * A time-limited URL for an object in a private bucket.
  *
- * Not needed today — all five buckets are public. It will be needed if
- * `reviews` moves to a private bucket, which it should before real guests
- * upload personal photos.
+ * This is how guest review photos are read. Prefer `signRefs` when signing more
+ * than one — this is a network round trip each.
  */
 export async function getSignedUrl(
   ref: MediaRef,
-  expiresInSeconds = 60 * 60,
+  expiresInSeconds = SIGNED_URL_TTL_SECONDS,
 ): Promise<string> {
   const { data, error } = await getSupabaseAdmin()
     .storage.from(ref.bucket)
@@ -89,6 +119,61 @@ export async function getSignedUrl(
     throw new StorageError(`sign ${ref.bucket}/${ref.path}`, error?.message);
   }
   return data.signedUrl;
+}
+
+/**
+ * Sign many objects in one round trip, keyed by `bucket/path`.
+ *
+ * A stay page can carry a dozen review photos. Signing them one at a time is a
+ * dozen sequential calls to Supabase before the page can render; this is one
+ * call per bucket.
+ *
+ * A path that cannot be signed maps to null rather than throwing — one missing
+ * guest photo should not take down the stay page it appears on.
+ */
+export async function signRefs(
+  refs: MediaRef[],
+  expiresInSeconds = SIGNED_URL_TTL_SECONDS,
+): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>();
+  if (refs.length === 0) return out;
+
+  const byBucket = new Map<string, string[]>();
+  for (const ref of refs) {
+    const paths = byBucket.get(ref.bucket) ?? [];
+    if (!paths.includes(ref.path)) paths.push(ref.path);
+    byBucket.set(ref.bucket, paths);
+  }
+
+  for (const [bucket, paths] of byBucket) {
+    const { data, error } = await getSupabaseAdmin()
+      .storage.from(bucket)
+      .createSignedUrls(paths, expiresInSeconds);
+
+    if (error) {
+      // Log and degrade: the caller gets nulls and renders without the photos.
+      console.error(
+        `[storage] batch sign failed for ${bucket}:`,
+        error.message,
+      );
+      for (const path of paths) out.set(`${bucket}/${path}`, null);
+      continue;
+    }
+
+    for (const item of data ?? []) {
+      // `path` comes back on each item; fall back to matching by order is not
+      // safe, so a missing path is simply a miss.
+      if (!item.path) continue;
+      out.set(`${bucket}/${item.path}`, item.error ? null : item.signedUrl);
+    }
+    // Anything Supabase did not answer for at all.
+    for (const path of paths) {
+      const key = `${bucket}/${path}`;
+      if (!out.has(key)) out.set(key, null);
+    }
+  }
+
+  return out;
 }
 
 // ---------------------------------------------------------------------------

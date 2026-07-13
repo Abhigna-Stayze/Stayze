@@ -2,7 +2,9 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { ZodError, type ZodType } from "zod";
 import { BookingError } from "@/services/booking.service";
+import { ExperienceError } from "@/services/experience.service";
 import { MediaError } from "@/services/media.service";
+import { ReviewError } from "@/services/review.service";
 import { StorageConflictError, StorageError } from "@/lib/storage";
 import { RateLimitError } from "@/lib/rate-limit";
 import { env } from "@/lib/env";
@@ -95,10 +97,15 @@ function toErrorResponse(error: unknown): NextResponse<ApiFailure> {
     return fail("Validation failed.", 422, toFieldIssues(error));
   }
 
-  // 400 — a rule the service enforces: too many guests, checkout before checkin,
-  // attaching media to a row that does not exist. These messages are written for
-  // humans and are safe to surface.
-  if (error instanceof BookingError || error instanceof MediaError) {
+  // 400 — a rule a service enforces: too many guests, checkout before checkin,
+  // a rating outside 1–5, attaching media to a row that does not exist. These
+  // messages are written for humans and are safe to surface.
+  if (
+    error instanceof BookingError ||
+    error instanceof MediaError ||
+    error instanceof ReviewError ||
+    error instanceof ExperienceError
+  ) {
     return fail(error.message, 400);
   }
 

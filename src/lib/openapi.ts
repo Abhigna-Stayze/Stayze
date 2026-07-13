@@ -4,12 +4,16 @@ import { createDocument } from "zod-openapi";
 import {
   attachTargets,
   createBookingSchema,
+  createReviewSchema,
   guideQuerySchema,
   stayQuerySchema,
+  updateReviewSchema,
 } from "@/lib/schemas";
 import { BUCKETS } from "@/lib/storage";
 import type {
   BookingView,
+  ExperienceCard,
+  ExperienceDetail,
   GuideCard,
   GuideDetail,
   NearbyPlaceView,
@@ -128,7 +132,12 @@ const reviewSchema = pin<ReviewView>()(
       comment: z.string(),
       stayedOn: nullableDateTime,
       source: z.string(),
-      images: z.array(z.object({ id: z.string(), url: z.string() })),
+      images: z
+        .array(z.object({ id: z.string(), url: z.string().nullable() }))
+        .meta({
+          description:
+            "Guest photos live in a PRIVATE bucket, so `url` is a short-lived SIGNED url, not a permanent one. It expires — do not cache or store it. Null when the object could not be signed.",
+        }),
     })
     .meta({ id: "Review" }),
 );
@@ -184,6 +193,10 @@ const stayDetailSchema = pin<StayDetail>()(
       checkOutTime: z.string(),
       inspectedOn: nullableDateTime,
       inspectedBy: z.string().nullable(),
+      cancellationPolicy: z.string().nullable().meta({
+        description:
+          "Free text. Cancellation is recorded, not enforced — there is no payment, so there is nothing to refund automatically.",
+      }),
       metaTitle: z.string().nullable(),
       metaDescription: z.string().nullable(),
       owner: z
@@ -226,6 +239,7 @@ const stayDetailSchema = pin<StayDetail>()(
       experiences: z.array(
         z.object({
           id: z.string(),
+          slug: z.string(),
           title: z.string(),
           description: z.string().nullable(),
           imageUrl: z.string().nullable(),
@@ -290,6 +304,11 @@ const bookingSchema = pin<BookingView>()(
       note: z.string().nullable(),
       estimatedTotal: z.number().nullable(),
       status: z.string(),
+      cancelledAt: nullableDateTime.meta({
+        description:
+          "Recorded, not enforced. Setting it does not change `status` — cancellation logic is deliberately not implemented.",
+      }),
+      cancellationReason: z.string().nullable(),
       createdAt: dateTime,
       stay: stayCardSchema,
       timeline: z.array(
@@ -311,6 +330,48 @@ const bookingSchema = pin<BookingView>()(
     })
     .meta({ id: "Booking" }),
 );
+
+const experienceCardSchema = pin<ExperienceCard>()(
+  z
+    .object({
+      id: z.string(),
+      slug: z.string(),
+      title: z.string(),
+      excerpt: z.string().nullable(),
+      imageUrl: z.string().nullable(),
+    })
+    .meta({ id: "ExperienceCard" }),
+);
+
+const experienceDetailSchema = pin<ExperienceDetail>()(
+  z
+    .object({
+      id: z.string(),
+      slug: z.string(),
+      title: z.string(),
+      excerpt: z.string().nullable(),
+      imageUrl: z.string().nullable(),
+      story: z.string(),
+      metaTitle: z.string().nullable(),
+      metaDescription: z.string().nullable(),
+      stays: z.array(stayCardSchema).meta({
+        description: "Published stays where this experience is offered.",
+      }),
+    })
+    .meta({ id: "ExperienceDetail" }),
+);
+
+const ratingResultSchema = z
+  .object({
+    stayId: z.string(),
+    ratingAvg: z.number().nullable(),
+    reviewCount: z.number(),
+  })
+  .meta({
+    id: "RatingResult",
+    description:
+      "The stay's rating AFTER the change. Recomputed in the same transaction, so this is the number the cards will now show.",
+  });
 
 const siteSettingsSchema = pin<SiteSettings>()(
   z.object({
@@ -409,6 +470,11 @@ export function buildOpenApiDocument(): ReturnType<typeof createDocument> {
       {
         name: "Booking",
         description: "WhatsApp enquiries and the trip timeline.",
+      },
+      {
+        name: "Experiences",
+        description:
+          "Destination experiences — each has its own page. A StayExperience is now only the junction saying which stays offer one.",
       },
       { name: "Site", description: "Settings, filter chips, amenities." },
       { name: "Media", description: "Uploads. Admin only." },
@@ -553,14 +619,116 @@ export function buildOpenApiDocument(): ReturnType<typeof createDocument> {
           requestParams: {
             query: z.object({
               stay: z.string().meta({ example: "coffeecharm" }),
+              includeUnpublished: z.enum(["true", "false"]).optional().meta({
+                description:
+                  "The moderation queue. REQUIRES x-admin-key — unpublished reviews have not been moderated and must never reach the public site.",
+              }),
             }),
           },
           responses: {
             "200": {
-              description: "Reviews.",
+              description:
+                "Reviews. Guest photos are short-lived SIGNED urls — the reviews bucket is private.",
               ...json(success(z.array(reviewSchema))),
             },
+            ...errors(401, 404, 422, 500),
+          },
+        },
+        post: {
+          tags: ["Stays"],
+          summary: "Create a review",
+          operationId: "createReview",
+          description: [
+            "Requires `x-admin-key`, deliberately: `Review` has no link to `BookingRequest`, so there is no way to establish that whoever posted it ever stayed. Reviews are entered by ops — including imported Airbnb and Google ones, which is what `source` is for.",
+            "",
+            "Defaults to `isPublished: false`. A new review does not move the stay's rating until it is published.",
+          ].join("\n"),
+          security: [{ adminKey: [] }],
+          requestBody: json(createReviewSchema),
+          responses: {
+            "201": {
+              description: "Created. The stay's rating is returned.",
+              ...json(
+                success(
+                  z.object({
+                    id: z.string(),
+                    stayId: z.string(),
+                    ratingAvg: z.number().nullable(),
+                    reviewCount: z.number(),
+                  }),
+                ),
+              ),
+            },
+            ...errors(400, 401, 422, 500),
+          },
+        },
+      },
+      "/experiences": {
+        get: {
+          tags: ["Experiences"],
+          summary: "List published experiences",
+          operationId: "listExperiences",
+          responses: {
+            "200": {
+              description: "Experiences, alphabetical.",
+              ...json(success(z.array(experienceCardSchema))),
+            },
+            ...errors(500),
+          },
+        },
+      },
+      "/experiences/{slug}": {
+        get: {
+          tags: ["Experiences"],
+          summary: "An experience, with the stays that offer it",
+          operationId: "getExperience",
+          requestParams: { path: z.object({ slug: slugParam }) },
+          responses: {
+            "200": {
+              description: "The experience.",
+              ...json(success(experienceDetailSchema)),
+            },
             ...errors(404, 422, 500),
+          },
+        },
+      },
+      "/reviews/{id}": {
+        patch: {
+          tags: ["Stays"],
+          summary: "Edit, publish or unpublish a review",
+          operationId: "updateReview",
+          description: [
+            "Requires `x-admin-key`.",
+            "",
+            "Publishing and unpublishing are just `isPublished` changing. **All of these move the stay's denormalised rating**, and the service recomputes `ratingAvg` and `reviewCount` in the same transaction — which is why the response returns them.",
+            "",
+            "Only published reviews count towards the rating.",
+          ].join("\n"),
+          security: [{ adminKey: [] }],
+          requestParams: { path: z.object({ id: z.string() }) },
+          requestBody: json(updateReviewSchema),
+          responses: {
+            "200": {
+              description: "Updated. The stay's new rating is returned.",
+              ...json(success(ratingResultSchema)),
+            },
+            ...errors(400, 401, 404, 422, 500),
+          },
+        },
+        delete: {
+          tags: ["Stays"],
+          summary: "Delete a review",
+          operationId: "deleteReview",
+          description:
+            "Requires `x-admin-key`. Recomputes the stay's rating. The review's photo ROWS cascade; the storage OBJECTS do not — delete those via /media/review-image/{id} first, or they are orphaned.",
+          security: [{ adminKey: [] }],
+          requestParams: { path: z.object({ id: z.string() }) },
+          responses: {
+            "200": {
+              description: "Deleted. The stay's new rating is returned.",
+              ...json(success(ratingResultSchema)),
+            },
+            ...errors(400, 401, 404, 500),
           },
         },
       },

@@ -209,22 +209,29 @@ export async function setRoomImage(
   await replaceObject({ bucket: room.imageBucket, path: room.imagePath }, ref);
 }
 
+/**
+ * The image now lives on the standalone Experience, not on the per-stay row.
+ * `experienceRef` is the experience's SLUG — StayExperience no longer has an id
+ * of its own, it is a junction.
+ */
 export async function setExperienceImage(
-  experienceId: string,
+  experienceSlug: string,
   ref: MediaRef | null,
 ): Promise<void> {
-  const exp = await prisma.stayExperience.findUnique({
-    where: { id: experienceId },
-    select: { imageBucket: true, imagePath: true },
+  const exp = await prisma.experience.findUnique({
+    where: { slug: experienceSlug },
+    select: { id: true, bucket: true, path: true },
   });
-  if (!exp) throw new MediaError(`No experience with id "${experienceId}".`);
+  if (!exp) {
+    throw new MediaError(`No experience with slug "${experienceSlug}".`);
+  }
 
-  await prisma.stayExperience.update({
-    where: { id: experienceId },
-    data: { imageBucket: ref?.bucket ?? null, imagePath: ref?.path ?? null },
+  await prisma.experience.update({
+    where: { id: exp.id },
+    data: { bucket: ref?.bucket ?? null, path: ref?.path ?? null },
   });
 
-  await replaceObject({ bucket: exp.imageBucket, path: exp.imagePath }, ref);
+  await replaceObject({ bucket: exp.bucket, path: exp.path }, ref);
 }
 
 export async function setNearbyPlaceImage(

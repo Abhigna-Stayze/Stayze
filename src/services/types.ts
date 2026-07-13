@@ -61,11 +61,36 @@ export type RoomView = {
   imageUrl: string | null;
 };
 
+/**
+ * An experience as it appears ON a stay page.
+ *
+ * `description` is kept for backward compatibility — it is the Experience's
+ * excerpt. Callers that want the long-form `story` should fetch the experience
+ * itself via /api/experiences/[slug].
+ */
 export type ExperienceView = {
   id: string;
+  slug: string;
   title: string;
   description: string | null;
   imageUrl: string | null;
+};
+
+/** A standalone experience — its own page, its own SEO. */
+export type ExperienceCard = {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  imageUrl: string | null;
+};
+
+export type ExperienceDetail = ExperienceCard & {
+  story: string;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  /** Stays where you can actually do this. */
+  stays: StayCard[];
 };
 
 export type NearbyPlaceView = {
@@ -87,7 +112,15 @@ export type ReviewView = {
   comment: string;
   stayedOn: Date | null;
   source: string;
-  images: Array<{ id: string; url: string }>;
+  /**
+   * Guest photos live in a PRIVATE bucket, so `url` is a short-lived SIGNED
+   * URL, not a permanent public one. It expires (see SIGNED_URL_TTL_SECONDS) —
+   * do not cache it, store it, or hand it to a build step.
+   *
+   * `url` is null when the object could not be signed. Render without the
+   * photo rather than with a broken image.
+   */
+  images: Array<{ id: string; url: string | null }>;
 };
 
 /**
@@ -117,6 +150,7 @@ export type StayDetail = StayCard & {
   checkOutTime: string;
   inspectedOn: Date | null;
   inspectedBy: string | null;
+  cancellationPolicy: string | null;
   metaTitle: string | null;
   metaDescription: string | null;
   /** Public profile only, and only when the owner has not opted out. */
@@ -185,6 +219,9 @@ export type BookingView = {
   note: string | null;
   estimatedTotal: number | null;
   status: string;
+  /** Recorded, not enforced — nothing derives status from these. */
+  cancelledAt: Date | null;
+  cancellationReason: string | null;
   createdAt: Date;
   stay: StayCard;
   timeline: TimelineStepView[];

@@ -89,6 +89,7 @@ async function wipe() {
   await prisma.stayAmenity.deleteMany();
   await prisma.nearbyPlace.deleteMany();
   await prisma.stayExperience.deleteMany();
+  await prisma.experience.deleteMany();
   await prisma.stayHighlight.deleteMany();
   await prisma.room.deleteMany();
   await prisma.stayImage.deleteMany();
@@ -235,8 +236,9 @@ async function main() {
     const ownerId = ownerByKey.get(s.ownerKey);
     if (!ownerId) throw new Error(`no owner for ${s.slug}`);
 
-    // ratingAvg / reviewCount are denormalised on Stay and nothing maintains
-    // them automatically — compute from the reviews we are about to insert.
+    // ratingAvg / reviewCount are denormalised. The review service recomputes
+    // them on every write; the seed inserts reviews in bulk, so it computes
+    // them here and recalculateAllRatings() verifies the result at the end.
     const ratingAvg =
       s.reviews.reduce((sum, r) => sum + r.rating, 0) / s.reviews.length;
 
@@ -273,6 +275,7 @@ async function main() {
         reviewCount: s.reviews.length,
         isFeatured: s.isFeatured,
         featuredOrder: s.featuredOrder,
+        cancellationPolicy: s.cancellationPolicy,
         status: "PUBLISHED",
         metaTitle: s.metaTitle,
         metaDescription: s.metaDescription,
@@ -330,19 +333,38 @@ async function main() {
       })),
     });
 
-    await prisma.stayExperience.createMany({
-      data: s.experiences.map((e, i) => {
-        const m = need("experiences", `${s.folder}/${e.slug}.jpg`);
-        return {
-          stayId: stay.id,
+    // Experiences are standalone now. Create each one once, then LINK it to
+    // the stay. The seed's experiences happen to be distinct per stay, but the
+    // upsert means a shared one (a Coffee Estate Tour offered at two stays)
+    // would produce one Experience and two links, which is the whole point.
+    for (const [i, e] of s.experiences.entries()) {
+      const m = need("experiences", `${s.folder}/${e.slug}.jpg`);
+
+      const experience = await prisma.experience.upsert({
+        where: { slug: e.slug },
+        create: {
+          slug: e.slug,
           title: e.title,
-          description: e.description,
-          imageBucket: m.bucket,
-          imagePath: m.path,
+          story: e.description,
+          excerpt: e.description,
+          bucket: m.bucket,
+          path: m.path,
+          metaTitle: `${e.title} — Chikmagalur | Stayze`,
+          metaDescription: e.description,
+          isPublished: true,
+        },
+        update: {},
+        select: { id: true },
+      });
+
+      await prisma.stayExperience.create({
+        data: {
+          stayId: stay.id,
+          experienceId: experience.id,
           sortOrder: i,
-        };
-      }),
-    });
+        },
+      });
+    }
 
     await prisma.nearbyPlace.createMany({
       data: s.nearby.map((p, i) => {
@@ -588,6 +610,7 @@ async function main() {
     StayImage: await prisma.stayImage.count(),
     Room: await prisma.room.count(),
     StayHighlight: await prisma.stayHighlight.count(),
+    Experience: await prisma.experience.count(),
     StayExperience: await prisma.stayExperience.count(),
     NearbyPlace: await prisma.nearbyPlace.count(),
     StayAmenity: await prisma.stayAmenity.count(),

@@ -1,5 +1,5 @@
 import "server-only";
-import { getPublicUrlOrNull } from "@/lib/storage";
+import { getPublicUrlOrNull, signRefs } from "@/lib/storage";
 import type {
   ExperienceView,
   NearbyPlaceView,
@@ -139,21 +139,30 @@ export function toRoom(room: {
   };
 }
 
-export function toExperience(exp: {
-  id: string;
-  title: string;
-  description: string | null;
-  imageBucket: string | null;
-  imagePath: string | null;
+/**
+ * A StayExperience junction row -> the shape a stay page renders.
+ *
+ * The content lives on Experience now; this row only carries the link and the
+ * per-stay ordering.
+ */
+export function toExperience(link: {
+  experience: {
+    id: string;
+    slug: string;
+    title: string;
+    excerpt: string | null;
+    bucket: string | null;
+    path: string | null;
+  };
 }): ExperienceView {
+  const exp = link.experience;
   return {
     id: exp.id,
+    slug: exp.slug,
     title: exp.title,
-    description: exp.description,
-    imageUrl: getPublicUrlOrNull({
-      bucket: exp.imageBucket,
-      path: exp.imagePath,
-    }),
+    // Kept as `description` so existing consumers of StayDetail do not break.
+    description: exp.excerpt,
+    imageUrl: getPublicUrlOrNull({ bucket: exp.bucket, path: exp.path }),
   };
 }
 
@@ -184,7 +193,7 @@ export function toNearbyPlace(place: {
   };
 }
 
-export function toReview(review: {
+type ReviewRow = {
   id: string;
   guestName: string;
   rating: number;
@@ -193,8 +202,23 @@ export function toReview(review: {
   stayedOn: Date | null;
   source: string;
   images?: Array<{ id: string; bucket: string; path: string }>;
-}): ReviewView {
-  return {
+};
+
+/**
+ * Reviews, with their guest photos signed.
+ *
+ * ASYNC, and takes the whole list rather than one review at a time — guest
+ * photos are in a PRIVATE bucket, so every image needs a signed URL, and
+ * signing them one by one would be a sequential round trip per photo before
+ * the page could render. `signRefs` does the lot in one call per bucket.
+ *
+ * Callers must map a LIST of reviews through this, not loop over it.
+ */
+export async function toReviews(reviews: ReviewRow[]): Promise<ReviewView[]> {
+  const refs = reviews.flatMap((r) => r.images ?? []);
+  const signed = await signRefs(refs);
+
+  return reviews.map((review) => ({
     id: review.id,
     guestName: review.guestName,
     rating: review.rating,
@@ -204,9 +228,10 @@ export function toReview(review: {
     source: review.source,
     images: (review.images ?? []).map((img) => ({
       id: img.id,
-      url: getPublicUrlOrNull(img) ?? "",
+      // null when signing failed — render without the photo, not with a broken one.
+      url: signed.get(`${img.bucket}/${img.path}`) ?? null,
     })),
-  };
+  }));
 }
 
 /**

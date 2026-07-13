@@ -219,6 +219,9 @@ export async function getBookingByReference(
     note: booking.note,
     estimatedTotal: num(booking.estimatedTotal),
     status: booking.status,
+    // Recorded, not enforced — nothing here derives status from these.
+    cancelledAt: booking.cancelledAt,
+    cancellationReason: booking.cancellationReason,
     createdAt: booking.createdAt,
     stay: toStayCard(booking.stay),
     timeline: booking.timeline.map((step) => ({
