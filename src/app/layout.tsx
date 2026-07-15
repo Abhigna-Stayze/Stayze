@@ -49,6 +49,14 @@ export const metadata: Metadata = {
     "Handpicked, personally inspected plantation stays in Chikmagalur and the Western Ghats.",
 };
 
+// The shell reads live site settings from the database on every page (footer
+// contacts, the WhatsApp number). That must happen at request time, not build
+// time: rendering it statically would bake stale contacts into the HTML and
+// force `next build` to open a database connection — which it must never do
+// (CI builds with placeholder credentials). Rendering dynamically keeps the
+// build DB-free and always serves current data.
+export const dynamic = "force-dynamic";
+
 export default async function RootLayout({
   children,
 }: Readonly<{

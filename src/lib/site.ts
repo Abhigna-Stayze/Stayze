@@ -26,6 +26,19 @@ export type SiteData = {
 };
 
 export const getSiteData = cache(async (): Promise<SiteData> => {
-  const [settings, tags] = await Promise.all([getSiteSettings(), getTags()]);
-  return { settings, tags };
+  try {
+    const [settings, tags] = await Promise.all([getSiteSettings(), getTags()]);
+    return { settings, tags };
+  } catch (error) {
+    // The shell is on every page; a database hiccup must not 500 the whole
+    // site. Degrade to an empty shell — the footer drops missing fields and
+    // the floating help hides when there is no number — and log it. This also
+    // keeps `next build` from crashing if it ever runs without a reachable
+    // database (the layout is dynamic, so it normally won't).
+    console.error(
+      "[site] getSiteData failed; rendering the shell without site data:",
+      error,
+    );
+    return { settings: null, tags: [] };
+  }
 });
