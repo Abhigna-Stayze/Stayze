@@ -47,14 +47,70 @@ The environment is validated at import by [src/lib/env.ts](src/lib/env.ts), whic
 
 ## Architecture
 
-One rule: **the UI never talks to the database or to storage.**
+One rule: **the UI never talks to the database or to storage.** _How_ it reaches data depends on where it renders. **Server Actions are not used** — everything writes and reads through the REST API or the service layer, so the same backend serves the website, a mobile app, an admin dashboard and WhatsApp automation.
+
+**Server Components** read through a server-only helper in `src/lib`, which calls a service. No component imports Prisma or Supabase; no gratuitous self-fetch.
 
 ```
-page / component  →  server action / API route  →  src/services/  →  src/lib/prisma.ts  →  PostgreSQL
-page / component  →  src/lib/storage.ts  →  src/lib/supabase.ts  →  Supabase Storage
+Server Component
+      │
+      ▼
+src/lib/*  (server-only helper, e.g. getSiteData)
+      │
+      ▼
+src/services/*.service.ts   ── business logic + all DB access
+      │
+      ▼
+src/lib/prisma.ts
+      │
+      ▼
+PostgreSQL
 ```
 
-All database access goes through the service layer in [src/services/](src/services/). Services return DTOs, not Prisma rows — Prisma's `Decimal` cannot be passed to a client component, and a `bucket` + `path` pair is not a URL. [src/services/mappers.ts](src/services/mappers.ts) does both conversions in one place.
+**Client Components** always go over HTTP to the REST API. They never import a service, Prisma, or a Supabase server client.
+
+```
+Client Component
+      │  fetch()
+      ▼
+src/app/api/**/route.ts     ── validate (Zod), call a service, return JSON
+      │
+      ▼
+src/services/*.service.ts
+      │
+      ▼
+src/lib/prisma.ts
+      │
+      ▼
+PostgreSQL
+```
+
+**Media** flows through the storage service, the only door to Supabase Storage:
+
+```
+route / service
+      │
+      ▼
+src/lib/storage.ts   ── the only door to Storage
+      │
+      ▼
+src/lib/supabase.ts
+      │
+      ▼
+Supabase Storage
+```
+
+### Rules of the layers
+
+| Layer                         | Owns                                                                                | Never                                                         |
+| ----------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| **Server Component**          | Rendering; reading via a `src/lib` server-only helper                               | Import Prisma/Supabase; self-fetch a REST route without cause |
+| **Client Component**          | Interaction; fetching over HTTP                                                     | Import a service, Prisma, or a Supabase server client         |
+| **API route**                 | Validate the request, call a service, shape the response                            | Business logic; touch Prisma directly                         |
+| **Service** (`src/services/`) | Prisma queries, Storage orchestration, business rules, transactions, calculations   | —                                                             |
+| **`src/lib`**                 | Config, utilities, server-only helpers, API/validation helpers, env, infrastructure | Business rules                                                |
+
+Services return **DTOs**, not Prisma rows — Prisma's `Decimal` cannot be passed to a client component, and a `bucket` + `path` pair is not a URL. [src/services/mappers.ts](src/services/mappers.ts) does both conversions in one place. `src/lib/storage.ts` is the low-level Storage _adapter_; the _rules_ about media (orphan cleanup, hero promotion, row↔object lifecycle) live in [src/services/media.service.ts](src/services/media.service.ts).
 
 ## API
 
