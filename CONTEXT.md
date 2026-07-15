@@ -455,12 +455,30 @@ The global chrome every page inherits, composed in `src/app/layout.tsx`: **Heade
 - **Footer** gracefully drops any missing field. Route links (Explore, About, Become a Host…) are structural and live in `src/lib/nav.ts`; the footer's "Explore" column is built from real API tags. `PRIMARY_NAV` deliberately has **no** /login, /signup or /account — there is no `User` model.
 - **Icons: Lucide.** Note lucide 1.x removed brand icons, so the Instagram link uses `Camera` (with an `aria-label`) rather than mixing in a second icon system.
 
+### The component library (Phase 3)
+
+The reusable, **presentational** design system every page is assembled from. It ships **no pages** — the components take typed props and render; the data comes from a Server Component (via a service) or a Client Component (via REST) higher up. **A component never fetches, never imports a service/Prisma/Supabase.** Props are the DTOs from `src/services/types.ts`, so a component consumes exactly what the API returns.
+
+Organised by role under `src/components/`:
+
+- **`ui/`** — primitives: `button`, `badge`, `tag`, `chip` (interactive filter/link pill), `rating`, `price` (+ `formatPrice`), `avatar`, `divider`, `skeleton`, `input`, `textarea`, `select`, `empty-state`.
+- **`shared/`** — indicators and helpers: `Thumbnail` (photo well with the roofline fallback for a stay with no image), `FitScoreBadge` (the gold ✓ Inspected stamp), `VerifiedBadge` (mist-tick trust mark), `AmenityIcon` (keyword→Lucide glyph), `FeatureItem`, `StatItem` (the dotted-leader ledger line).
+- **`sections/`** — `SectionHeading`, `SectionDivider`.
+- **`cards/`** — `StayCard` (the one that matters most — five pages use it), `ReviewCard`, `HostCard`, `ExperienceCard`, `GuideCard`.
+- **`search/`** — `SearchBar` + `SearchField` (the composable bar), `SearchFilters` (the chip row).
+- **`booking/`** — `BookingSummary`, `BookingSteps`, `GuestCounter`, `DateField` (trigger only — the picker is a later phase), `TimelineStep` (the trip-timeline node).
+- **`gallery/`** — `Gallery` (hero mosaic), `ImageGrid`, `Lightbox` (Radix Dialog: focus trap, Escape, scroll lock).
+
+Rules baked into the components so a caller cannot break them: the **FitScore stamp renders only when `fitScore` is set**; **`ratingAvg === null` shows "New stay", never a zero** (`Rating` returns `null`, `StayCard` shows a Badge); **every figure is mono** via `.num` (`Price`, `Rating`, `StatItem`, `GuestCounter`); the **owner DTO has no phone/email**, so `HostCard` cannot leak them; **review photos are signed URLs** — `ReviewCard` drops a null-URL photo rather than caching or breaking. Interactivity is isolated to the few Client Components that need it (`Chip`, `SearchFilters`, `GuestCounter`, `DateField`, `Gallery`, `Lightbox`); the cards and most primitives stay Server Components. Motion animates `transform`/`opacity` only, never `transition-all`, and the global `prefers-reduced-motion` backstop covers it.
+
+`next.config.ts` allows `*.supabase.co` through `next/image` so components render real Storage media; a stay with no photo falls back to `Thumbnail`'s roofline well.
+
 ## State
 
-Scaffold, **Schema v1.1 migrated and live**, **seeded with development data**, **a working data layer**, **a complete REST API**, **the brand foundation for the UI**, and **the application shell**.
+Scaffold, **Schema v1.1 migrated and live**, **seeded with development data**, **a working data layer**, **a complete REST API**, **the brand foundation for the UI**, **the application shell**, and **the reusable component library**.
 
 The database holds 776 rows across all 21 tables and 75 objects across the five storage buckets. The service layer reads and writes it, and `src/app/api/` exposes it over REST. Both have been driven for real, not just typechecked: every endpoint was hit against the running server — 24 GET cases, the booking POST and its validation rules, the upload endpoint with its bucket allowlist, path-traversal guard, size and type caps, and the admin-key guard rejecting unauthenticated writes. Test rows and objects were cleaned up afterwards. CI is green on `main`.
 
-What does not exist yet: **any product pages**. The brand foundation and the shell (header, footer, floating help — all wired to `GET /api/site`) are in, but the only route is a placeholder home. No auth, no admin surface. The next step is Phase 3 — the stay card, then Home → Explore → Stay detail. `FRONTEND.md` has the build order.
+What does not exist yet: **any product pages**. The brand foundation, the shell (header, footer, floating help — all wired to `GET /api/site`) and the presentational component library (Phase 3) are in, but the only route is a placeholder home. No auth, no admin surface. The next step is Phase 4 — assembling the components into pages: Home → Explore → Stay detail, which have live data and endpoints today. `FRONTEND.md` has the build order.
 
 Cancellation is **recorded, not enforced**. `Stay.cancellationPolicy`, `BookingRequest.cancelledAt` and `cancellationReason` exist so the decision can be written down. Nothing derives `status` from them, and nothing refunds anything — there is no payment. Setting `cancelledAt` does not cancel a booking; a human does, and then writes it down.
