@@ -119,8 +119,9 @@ export function ExploreClient({
         onSkip={dismissIntro}
       />
 
-      <div className="border-border bg-paper/95 sticky top-16 z-30 border-b backdrop-blur-sm">
-        <div className="container-page py-4">
+      {/* Filters — deliberately NOT sticky; they scroll away with the page. */}
+      <div className="border-border border-b">
+        <div className="container-page py-3">
           <ExploreToolbar
             filters={filters}
             onUpdate={update}
@@ -129,7 +130,7 @@ export function ExploreClient({
         </div>
       </div>
 
-      <div className="container-page section">
+      <div className="container-page py-6">
         {/* Count + reset. */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-muted-ink text-sm" aria-live="polite">
@@ -148,10 +149,12 @@ export function ExploreClient({
           )}
         </div>
 
-        {/* Results. */}
-        <div className="mt-6">
-          {loading && stays.length === 0 ? (
-            <CardGridSkeleton count={6} />
+        {/* Results. While a filter is being fetched, show skeleton cards in
+            place of the grid — keeping the previous count so the layout holds
+            steady — rather than dimming the old results. */}
+        <div className="mt-5">
+          {loading ? (
+            <CardGridSkeleton count={sorted.length || 6} />
           ) : sorted.length === 0 ? (
             <EmptyState
               icon={MapPinOff}
@@ -160,13 +163,7 @@ export function ExploreClient({
               action={<Button onClick={reset}>Reset filters</Button>}
             />
           ) : (
-            <ul
-              aria-busy={loading}
-              className={
-                "grid list-none grid-cols-1 gap-6 transition-opacity duration-200 sm:grid-cols-2 lg:grid-cols-3 " +
-                (loading ? "pointer-events-none opacity-50" : "opacity-100")
-              }
-            >
+            <ul className="grid list-none grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {sorted.map((stay, i) => (
                 <li key={stay.id}>
                   <StayCard stay={stay} priority={i < 3} />

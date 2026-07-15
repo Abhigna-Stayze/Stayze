@@ -54,9 +54,9 @@ export default async function ExplorePage({
       {/* Compact page header — eyebrow + title only. The live property count
           sits with the results in ExploreClient, since it changes with the
           filters. */}
-      <div className="container-page pt-8 pb-2">
+      <div className="container-page pt-6 pb-3">
         <p className="eyebrow text-muted-ink">Discover · Chikmagalur</p>
-        <h1 className="heading-1 text-bark mt-2">
+        <h1 className="heading-2 text-bark mt-1.5">
           Explore verified plantation stays
         </h1>
       </div>
