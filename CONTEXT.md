@@ -233,29 +233,41 @@ The pooled/direct split is a Supabase requirement, not a preference: PgBouncer i
 
 ## Architecture
 
-One rule, and everything else follows from it: **the UI never talks to the database or to storage.**
+One rule, and everything else follows from it: **the UI never talks to the database or to storage.** How it reaches data depends on whether it renders on the server or the client.
+
+**Server Components** read through a **server-only helper in `src/lib`** (e.g. `getSiteData` in `src/lib/site.ts`), which calls a service. They may call a service directly, but the helper is the preferred seam. They must **never** import Prisma or a Supabase client, and must **not self-fetch a REST route** without a specific reason — a self-fetch needs `headers()` for an absolute URL, which forces the page dynamic.
 
 ```
-client
+Server Component
       ↓
-src/app/api/**/route.ts            ← REST. Validates, calls a service, returns JSON.
+src/lib/*  (server-only helper)     ← getSiteData, etc.
       ↓
-src/services/*.service.ts          ← all database access lives here
+src/services/*.service.ts           ← all database access lives here
       ↓
-src/lib/prisma.ts
-      ↓
-PostgreSQL
-
-client
-      ↓
-src/app/api/upload/route.ts
-      ↓
-src/lib/storage.ts                 ← the only door to Storage
-      ↓
-src/lib/supabase.ts
-      ↓
-Supabase Storage
+src/lib/prisma.ts → PostgreSQL
 ```
+
+**Client Components** always go over **HTTP** to the REST API. They must **never** import a service, Prisma, or a Supabase server client. (A pure helper like `whatsappLink` in `src/lib/whatsapp.ts` — no `server-only`, no data access — is fine to share.)
+
+```
+Client Component
+      ↓  fetch()
+src/app/api/**/route.ts             ← REST. Validates, calls a service, returns JSON.
+      ↓
+src/services/*.service.ts
+      ↓
+src/lib/prisma.ts → PostgreSQL
+```
+
+**Media** goes through the storage service, the only door to Supabase Storage:
+
+```
+route / service
+      ↓
+src/lib/storage.ts  →  src/lib/supabase.ts  →  Supabase Storage
+```
+
+**The service layer is the single home of business logic** — Prisma queries, Storage orchestration, business rules, transactions, calculations. Neither Server Components, `src/lib` helpers, nor API routes may contain it. `src/lib` is for configuration, utilities, server-only helpers, API/validation helpers, env and shared infrastructure — **not business rules**. (`src/lib/storage.ts` is the low-level Storage _adapter_; the _rules_ about media — orphan cleanup, hero promotion, row/object lifecycle — live in `src/services/media.service.ts`.)
 
 **Server Actions are not used.** The decision (2026-07-12) is a REST API via Route Handlers, so the same endpoints can serve the website, a future mobile app, an admin dashboard, WhatsApp automation and AI integrations. Nothing is coupled to a React render.
 
