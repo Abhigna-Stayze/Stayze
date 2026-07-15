@@ -10,8 +10,8 @@ import { BadgeCheck, Star } from "lucide-react";
  */
 export default function FoundationPlaceholder() {
   return (
-    <main className="container-page section flex flex-1 flex-col justify-center">
-      <p className="eyebrow">Plantation ledger · Chikmagalur</p>
+    <section className="container-page section flex flex-1 flex-col justify-center">
+      <p className="eyebrow text-muted-ink">Plantation ledger · Chikmagalur</p>
 
       <h1 className="display mt-3 max-w-2xl">
         Escape the noise.
@@ -45,6 +45,6 @@ export default function FoundationPlaceholder() {
           </span>
         </div>
       </div>
-    </main>
+    </section>
   );
 }

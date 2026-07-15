@@ -1,0 +1,20 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Western Ghats">
+  <title>Stayze — hero placeholder</title>
+  <!-- Light plantation-ledger landscape so Home/shell can render before real
+       hero photography exists. Flat bands on paper, no gradients, per the brand. -->
+  <rect width="1600" height="900" fill="#F2ECE0"/>
+  <!-- sun -->
+  <circle cx="1180" cy="240" r="70" fill="#C9A05C" opacity="0.6"/>
+  <!-- ridge 1 (far) -->
+  <path d="M0 470 Q 300 400 640 450 T 1280 430 T 1600 450 V900 H0 Z" fill="#5B7553" opacity="0.16"/>
+  <!-- ridge 2 -->
+  <path d="M0 570 Q 400 500 820 555 T 1600 540 V900 H0 Z" fill="#5B7553" opacity="0.26"/>
+  <!-- ridge 3 (near) -->
+  <path d="M0 680 Q 520 610 1040 665 T 1600 650 V900 H0 Z" fill="#5B7553" opacity="0.42"/>
+  <!-- coffee-row hatching on the near ridge -->
+  <g stroke="#3D2B1F" stroke-width="2" opacity="0.10">
+    <path d="M120 760 L 60 900"/><path d="M320 745 L 250 900"/><path d="M540 750 L 470 900"/>
+    <path d="M780 748 L 720 900"/><path d="M1020 752 L 970 900"/><path d="M1280 746 L 1240 900"/>
+    <path d="M1500 750 L 1470 900"/>
+  </g>
+</svg>

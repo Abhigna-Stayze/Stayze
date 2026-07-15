@@ -233,14 +233,15 @@
   letter-spacing: 0;
 }
 
-/* The small uppercase mono label seen on every panel: WHERE, CHECK-IN, DATA. */
+/* The small uppercase mono label seen on every panel: WHERE, CHECK-IN, DATA.
+   A type treatment only — pair with a text-* colour (muted on paper, gold on
+   the dark footer) so it doesn't fight the colour you actually want. */
 @utility eyebrow {
   font-family: var(--font-mono);
   font-size: 0.6875rem; /* 11px */
   line-height: 1.2;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--muted-ink);
 }
 
 /* --- Type scale (Fraunces display + section headings) -------------------- */

@@ -429,14 +429,25 @@ Phase 1 of the UI is the brand foundation — no pages yet. It is done. The rule
 - **Favicon:** `src/app/icon.svg` (roofline mark) and `src/app/apple-icon.png` (180×180, rasterised from the avatar). The scaffold `favicon.ico` is gone.
 - **Light only.** No dark theme is shipped — dark surfaces (footer, hero) use `--bark` as a colour, not a `.dark` mode. shadcn's `dark:` variant is defined so its components compile, but nothing toggles it.
 
-`src/app/page.tsx` is a **placeholder that proves the foundation**, not the Home page — it renders the tokens (paper ground, Fraunces display, mono numbers, the gold stamp) and gets replaced in Phase 2.
+`src/app/page.tsx` is a **placeholder that proves the foundation**, not the Home page — it renders the tokens (paper ground, Fraunces display, mono numbers, the gold stamp) and gets replaced in a later phase.
+
+### The application shell (Phase 2)
+
+The global chrome every page inherits, composed in `src/app/layout.tsx`: **Header → page `<main>` → Footer → floating help**. Components live in `src/components/layout/`.
+
+- **The shell's data comes from one source: `src/lib/site.ts` (`getSiteData`)**, which calls the site service — the same code path `GET /api/site` runs. **Nothing is hardcoded**: the footer's email, phone, WhatsApp link and Instagram icon, and the floating button's number, all come from `SiteSetting`. It is wrapped in React `cache()` and called once in the layout. No component imports Prisma/Supabase — they import `getSiteData` (server) or receive props. `whatsappLink()` lives in `src/lib/whatsapp.ts` (a pure helper, no `server-only`) so Client Components can use it too.
+- **Header** (`Header.tsx`) is a Server Component, `sticky top-0`, paper with a hairline base. Desktop `Navigation` and the `MobileNavigation` drawer swap at `lg`. Only `NavLink` is a Client Component — it reads the pathname for the active (clay) state; everything else stays server-rendered.
+- **MobileNavigation** is a Radix Dialog (`src/components/ui/sheet.tsx`), which gives the focus trap, Escape-to-close, body scroll lock and focus return for free — verified in a browser. shadcn's registry is unreachable from this environment, so `button.tsx` and `sheet.tsx` were authored directly against `@radix-ui/react-dialog`; they are what `shadcn add` would have vendored.
+- **FloatingHelpButton** is a Client Component for one reason: it **hides on `/book/*`** (no exit at the moment of conversion, per the design). Fixed bottom-right, opens WhatsApp from the API number.
+- **Footer** gracefully drops any missing field. Route links (Explore, About, Become a Host…) are structural and live in `src/lib/nav.ts`; the footer's "Explore" column is built from real API tags. `PRIMARY_NAV` deliberately has **no** /login, /signup or /account — there is no `User` model.
+- **Icons: Lucide.** Note lucide 1.x removed brand icons, so the Instagram link uses `Camera` (with an `aria-label`) rather than mixing in a second icon system.
 
 ## State
 
-Scaffold, **Schema v1.1 migrated and live**, **seeded with development data**, **a working data layer**, **a complete REST API**, and **the brand foundation for the UI**.
+Scaffold, **Schema v1.1 migrated and live**, **seeded with development data**, **a working data layer**, **a complete REST API**, **the brand foundation for the UI**, and **the application shell**.
 
 The database holds 776 rows across all 21 tables and 75 objects across the five storage buckets. The service layer reads and writes it, and `src/app/api/` exposes it over REST. Both have been driven for real, not just typechecked: every endpoint was hit against the running server — 24 GET cases, the booking POST and its validation rules, the upload endpoint with its bucket allowlist, path-traversal guard, size and type caps, and the admin-key guard rejecting unauthenticated writes. Test rows and objects were cleaned up afterwards. CI is green on `main`.
 
-What does not exist yet: **any pages**. The brand foundation is in (see above), but no product page renders a single row of data. No auth, no admin surface. The next step is Phase 2 — the shell (header, footer, floating help from `GET /api/site`), then the stay card, then Home → Explore → Stay detail. `FRONTEND.md` has the build order.
+What does not exist yet: **any product pages**. The brand foundation and the shell (header, footer, floating help — all wired to `GET /api/site`) are in, but the only route is a placeholder home. No auth, no admin surface. The next step is Phase 3 — the stay card, then Home → Explore → Stay detail. `FRONTEND.md` has the build order.
 
 Cancellation is **recorded, not enforced**. `Stay.cancellationPolicy`, `BookingRequest.cancelledAt` and `cancellationReason` exist so the decision can be written down. Nothing derives `status` from them, and nothing refunds anything — there is no payment. Setting `cancelledAt` does not cancel a booking; a human does, and then writes it down.

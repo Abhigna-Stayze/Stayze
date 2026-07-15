@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { Header } from "@/components/layout/Header";
+import { Footer } from "@/components/layout/Footer";
+import { FloatingHelpButton } from "@/components/layout/FloatingHelpButton";
+import { getSiteData } from "@/lib/site";
 
 /**
  * The three brand faces of the plantation ledger. Loaded once here and exposed
@@ -45,17 +49,30 @@ export const metadata: Metadata = {
     "Handpicked, personally inspected plantation stays in Chikmagalur and the Western Ghats.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // The shell's one data read — the same content GET /api/site returns.
+  // Fetched once here and shared with the footer and the floating help button,
+  // so the WhatsApp number and contacts are never hardcoded.
+  const site = await getSiteData();
+
   return (
     <html
       lang="en"
       className={`${inter.variable} ${fraunces.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        <Header />
+        {/* Every page renders inside this main; the shell wraps it. */}
+        <main className="flex flex-1 flex-col">{children}</main>
+        <Footer data={site} />
+        <FloatingHelpButton
+          whatsappNumber={site.settings?.whatsappNumber ?? null}
+        />
+      </body>
     </html>
   );
 }

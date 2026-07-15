@@ -7,7 +7,7 @@ rules for building it.
 Read this with two companions open:
 
 - **`CONTEXT.md`** — the architecture, the API surface, the storage rules. Non-negotiable.
-- **`Stayze — Website Page-by-Page Design.pdf`** and **`Stayze — Website UI Design.pdf`** (in the parent folder) — the page-by-page spec and the rendered mockups. **These are the reference.** We are not pixel-matching an external screenshot; we are building what those documents describe.
+- **The design collection** in the parent folder — `../Stayze — Design Collection/`. The buildable spec is `01 — Design Spec/Stayze — Website Page-by-Page Design.md`; the rendered mockups are the two PDFs under `02 — Rendered PDFs/`. **These are the reference.** We are not pixel-matching an external screenshot; we are building what those documents describe. See that folder's `README.md` for the full contents.
 
 ## Always do first
 
