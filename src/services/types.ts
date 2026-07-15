@@ -34,6 +34,8 @@ export type StayCard = {
   fitScore: number | null;
   tier: string | null;
   verification: string;
+  /** When the stay was created — powers the "Newest" sort on Explore. */
+  createdAt: Date;
   heroImageUrl: string | null;
   heroImageAlt: string | null;
   /** The 2–3 signature features shown on the card. */

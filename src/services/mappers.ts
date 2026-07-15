@@ -65,6 +65,7 @@ type StayRowForCard = {
   fitScore: number | null;
   tier: string | null;
   verification: string;
+  createdAt: Date;
   images?: ImageRow[];
   highlights?: Array<{ label: string }>;
   tags?: Array<{ tag: { name: string; slug: string } }>;
@@ -94,6 +95,7 @@ export function toStayCard(stay: StayRowForCard): StayCard {
     fitScore: stay.fitScore,
     tier: stay.tier,
     verification: stay.verification,
+    createdAt: stay.createdAt,
     heroImageUrl: hero ? getPublicUrlOrNull(hero) : null,
     heroImageAlt: hero?.altText ?? null,
     highlights: (stay.highlights ?? []).map((h) => h.label),

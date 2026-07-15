@@ -53,6 +53,7 @@ const cardSelect = {
   fitScore: true,
   tier: true,
   verification: true,
+  createdAt: true,
   images: {
     where: { isHero: true },
     take: 1,
