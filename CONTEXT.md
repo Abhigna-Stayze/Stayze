@@ -388,7 +388,6 @@ Real, and worth handling before building on top of this:
   - **`Review` has no link to `BookingRequest`**, so a reviewer cannot be verified as having stayed. Possibly deliberate, since `ReviewSource` allows imported Airbnb/Google reviews.
   - **`Stay.ratingAvg` and `Stay.reviewCount` are denormalised.** Nothing maintains them; they must be recomputed whenever a review is published.
 - **Row Level Security is bypassed.** Prisma connects through the pooler as the `postgres` role, which ignores Supabase RLS policies entirely. It matters the moment auth exists: if Supabase Auth is added on the assumption that RLS protects rows, **it will not**. Either enforce every access rule in application code, or connect as a restricted role and design RLS deliberately. An architecture decision, not a bug — but it must be a conscious one.
-- **The brand is not applied.** The SVGs are in `public/brand/` but wired into nothing — the app still ships the default `src/app/favicon.ico`, and `globals.css` still carries the scaffold's Geist fonts and neutral colours rather than the brand palette and type stack. See the parent `CONTEXT.md` §1 for the palette and the Fraunces / Inter / JetBrains Mono stack. Note the mono-for-all-numerics rule is a hard rule there, not a suggestion.
 - **No tests.** CI runs format, lint, typecheck and build — but there is nothing to test yet.
 
 ## Commit identity
@@ -417,12 +416,27 @@ Repo: `Abhigna-Stayze/Stayze` — private, default branch `main`.
 - **Update this file in the same commit as the change it describes.** A stale `CONTEXT.md` is the one failure mode that makes every other convention here useless. If a step is now done, say it is done; if a command no longer works, fix the command.
 - **Commits carry no AI attribution.** No `Co-Authored-By` trailers, no "Generated with" badges, no mention of Claude in a commit message. Authored as the commit identity above, and nothing else. `.claude/settings.json` sets `includeCoAuthoredBy: false` to enforce this locally; that file is gitignored, so re-create it on a fresh clone.
 
+## Frontend foundation
+
+Phase 1 of the UI is the brand foundation — no pages yet. It is done. The rules for building pages on top are in **`FRONTEND.md`** (start there); the design system itself lives in **`src/app/globals.css`**.
+
+- **Palette — the plantation ledger, eight tokens only.** `--bark --clay --mist --gold --paper --paper-2 --ink --error`, defined as CSS variables and exposed as Tailwind utilities (`bg-paper`, `text-bark`, …). **Never a default Tailwind colour** (no `blue-600`). Two dark tokens exist because **clay fails WCAG AA on paper** (~4.3:1) — body text is `--ink`/`--bark`, clay is for buttons, borders and focus rings only. The ground is `--paper`, **not white**.
+- **Three fonts, loaded once in `layout.tsx` via `next/font/google`.** Fraunces → headings (`--font-serif`), Inter → body/UI (`--font-sans`), JetBrains Mono → **every number** (`--font-mono`). The mono rule is a brand rule; reach for the `.num` utility on any figure.
+- **Tailwind v4, CSS-first.** All config is in `globals.css` via `@theme` — there is **no `tailwind.config.js`**, and adding one is a regression. Custom utilities (`.num`, `.eyebrow`, `.stamp`, `.display`, `.heading-*`, `.container-page`, `.section`, `.card-surface`, `.card-float`) are `@utility` blocks; they tree-shake, so they only appear in the compiled CSS once something uses them.
+- **One elevation.** `--elevation` (`0 1px 2px rgba(0,0,0,.06)`) → `shadow-card`; a second `--elevation-float` → `shadow-float` for genuinely floating things (booking card, help button). No glossy, tinted or layered shadows — the ledger is flat.
+- **shadcn/ui is initialised, not populated.** `components.json` + `src/lib/utils.ts` (`cn`) exist, and the brand tokens are mapped to shadcn's semantic names (`--primary` = clay, `--background` = paper, `--ring` = clay …), so `npx shadcn@latest add <component>` produces an in-brand component with no restyling. No components are vendored yet — add per-component.
+- **Icons: Lucide** (`lucide-react`), the single icon system.
+- **Favicon:** `src/app/icon.svg` (roofline mark) and `src/app/apple-icon.png` (180×180, rasterised from the avatar). The scaffold `favicon.ico` is gone.
+- **Light only.** No dark theme is shipped — dark surfaces (footer, hero) use `--bark` as a colour, not a `.dark` mode. shadcn's `dark:` variant is defined so its components compile, but nothing toggles it.
+
+`src/app/page.tsx` is a **placeholder that proves the foundation**, not the Home page — it renders the tokens (paper ground, Fraunces display, mono numbers, the gold stamp) and gets replaced in Phase 2.
+
 ## State
 
-Scaffold, **Schema v1.1 migrated and live**, **seeded with development data**, **a working data layer**, and **a complete REST API**.
+Scaffold, **Schema v1.1 migrated and live**, **seeded with development data**, **a working data layer**, **a complete REST API**, and **the brand foundation for the UI**.
 
 The database holds 776 rows across all 21 tables and 75 objects across the five storage buckets. The service layer reads and writes it, and `src/app/api/` exposes it over REST. Both have been driven for real, not just typechecked: every endpoint was hit against the running server — 24 GET cases, the booking POST and its validation rules, the upload endpoint with its bucket allowlist, path-traversal guard, size and type caps, and the admin-key guard rejecting unauthenticated writes. Test rows and objects were cleaned up afterwards. CI is green on `main`.
 
-What does not exist yet: **any UI**. There is one placeholder route and no page that renders a single row. No auth, no admin surface. The API is finished and unused — the next step is the pages the Full Page Designs describe, starting with Home (featured stays) and Stay Detail, both of which have real data and an endpoint waiting for them.
+What does not exist yet: **any pages**. The brand foundation is in (see above), but no product page renders a single row of data. No auth, no admin surface. The next step is Phase 2 — the shell (header, footer, floating help from `GET /api/site`), then the stay card, then Home → Explore → Stay detail. `FRONTEND.md` has the build order.
 
 Cancellation is **recorded, not enforced**. `Stay.cancellationPolicy`, `BookingRequest.cancelledAt` and `cancellationReason` exist so the decision can be written down. Nothing derives `status` from them, and nothing refunds anything — there is no payment. Setting `cancelledAt` does not cancel a booking; a human does, and then writes it down.

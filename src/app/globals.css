@@ -1,26 +1,329 @@
 @import "tailwindcss";
+/* Keyframe/animation utilities shadcn components expect on Tailwind v4. */
+@import "tw-animate-css";
+
+/*
+ * Stayze — the plantation-ledger design foundation.
+ *
+ * This file IS the design system. Every page and component inherits from it:
+ * the palette, the three fonts, one flat elevation, the clay focus ring. Build
+ * a page on top and it looks like Stayze before you style a single element.
+ *
+ * Tailwind v4, CSS-first. There is no tailwind.config.js — tokens live in the
+ * @theme block below and generate utilities (bg-paper, text-bark, font-serif,
+ * shadow-card, rounded-lg …).
+ *
+ * Light only. The ledger's ground is PAPER, never white. Dark surfaces (footer,
+ * hero) use --bark as a colour, not a theme. shadcn's `dark:` variant is
+ * defined so its components compile, but no `.dark` theme is shipped.
+ */
+
+@custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* --- Plantation ledger palette (the only eight brand colours) ---------- */
+  --bark: #3d2b1f; /* primary ink, dark surfaces, footer */
+  --clay: #b5651d; /* CTAs, active chips, focus rings — never body text */
+  --mist: #5b7553; /* verification, success, the ✓ */
+  --gold: #c9a05c; /* the Inspected stamp, tags */
+  --paper: #f2ece0; /* page ground — the default surface, NOT white */
+  --paper-2: #e8dfcc; /* card wells, dividers */
+  --ink: #2a2620; /* body text */
+  --error: #a8321e; /* errors only */
+
+  /* --- Derived neutrals -------------------------------------------------- */
+  --card: #fbf8f1; /* the raised card surface — a warm off-white, not #fff */
+  --border: #ded4c0; /* hairlines, input borders, dividers */
+  /* Muted text that still clears WCAG AA on paper (~5.2:1). Clay does NOT
+     (~4.3:1), which is why it is banned from body copy — use this instead. */
+  --muted-ink: #6f6355;
+
+  /* --- Shape, depth, motion ---------------------------------------------- */
+  --radius: 0.625rem; /* 10px — cards, inputs. Pills use rounded-full. */
+  /* ONE elevation. The ledger is flat and grounded: no glossy or tinted
+     shadows, no glass. A card gets exactly this and nothing more. */
+  --elevation: 0 1px 2px rgba(0, 0, 0, 0.06);
+  /* A slightly stronger lift for genuinely floating things — the booking card,
+     the "Need Help?" button. The second and last rung of the depth ladder. */
+  --elevation-float: 0 4px 12px rgba(61, 43, 31, 0.1);
+  --transition: 160ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* --- shadcn semantic tokens → brand ------------------------------------
+     shadcn/ui components read these names. Mapping them to brand tokens means
+     a `<Button>` added later is clay, on paper, in the right radius — with no
+     per-component restyling. */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card-foreground: var(--ink);
+  --popover: var(--card);
+  --popover-foreground: var(--ink);
+  --primary: var(--clay);
+  --primary-foreground: #fbf8f1;
+  --secondary: var(--paper-2);
+  --secondary-foreground: var(--bark);
+  --muted: var(--paper-2);
+  --muted-foreground: var(--muted-ink);
+  --accent: var(--gold);
+  --accent-foreground: var(--bark);
+  --destructive: var(--error);
+  --destructive-foreground: #fbf8f1;
+  --input: var(--border);
+  --ring: var(--clay);
 }
 
 @theme inline {
+  /* --- Brand colours → utilities (bg-bark, text-clay, border-gold …) ----- */
+  --color-bark: var(--bark);
+  --color-clay: var(--clay);
+  --color-mist: var(--mist);
+  --color-gold: var(--gold);
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-ink: var(--ink);
+  --color-error: var(--error);
+  --color-muted-ink: var(--muted-ink);
+
+  /* --- shadcn semantic colours → utilities ------------------------------- */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* --- Type: three families, each with one job --------------------------- */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-fraunces), ui-serif, Georgia, serif;
+  --font-mono:
+    var(--font-jetbrains-mono), ui-monospace, "SFMono-Regular", monospace;
+
+  /* --- Radius ladder (shadcn reads --radius-sm … --radius-xl) ------------- */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* --- Elevation → shadow-card / shadow-float ---------------------------- */
+  --shadow-card: var(--elevation);
+  --shadow-float: var(--elevation-float);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  /* shadcn's contract: default border and ring colours everywhere. */
+  *,
+  ::after,
+  ::before {
+    border-color: var(--border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    line-height: 1.6; /* generous on body, per the brand */
+    font-feature-settings: "cv11", "ss01";
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Headings are Fraunces, barked, tight — set once so pages need not repeat. */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-serif);
+    color: var(--bark);
+    font-weight: 400;
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: inherit;
+  }
+
+  /* Gold highlight, barked text — warm, not the browser's blue. */
+  ::selection {
+    background-color: color-mix(in srgb, var(--gold) 45%, transparent);
+    color: var(--bark);
+  }
+
+  /* One focus treatment for the whole site: a clay ring, keyboard only. */
+  :focus-visible {
+    outline: 2px solid var(--clay);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Subtle scrollbar — present, not loud. Bark thumb on paper. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--bark) 25%, transparent)
+      transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--bark) 22%, transparent);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--bark) 38%, transparent);
+  }
+
+  /* The brand animates transform and opacity only, and never against a user's
+     wishes. This is the global backstop; components must not use transition-all. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), system-ui, sans-serif;
+/*
+ * Reusable utilities. Tailwind v4 `@utility` — composable, variant-aware
+ * (hover:, md:, …), and usable from @apply. These encode the design decisions
+ * that would otherwise be retyped on every page.
+ */
+
+/* EVERY NUMBER. Prices, ratings, FitScores, distances, dates, guest counts.
+   Tabular so figures align in a column; slashed zero for legibility. */
+@utility num {
+  font-family: var(--font-mono);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  font-variant-numeric: tabular-nums slashed-zero;
+  letter-spacing: 0;
+}
+
+/* The small uppercase mono label seen on every panel: WHERE, CHECK-IN, DATA. */
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem; /* 11px */
+  line-height: 1.2;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-ink);
+}
+
+/* --- Type scale (Fraunces display + section headings) -------------------- */
+@utility display {
+  font-family: var(--font-serif);
+  font-size: clamp(2.5rem, 1.8rem + 3.5vw, 3.75rem);
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  font-weight: 400;
+}
+@utility heading-1 {
+  font-family: var(--font-serif);
+  font-size: clamp(2rem, 1.5rem + 2vw, 2.75rem);
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  font-weight: 400;
+}
+@utility heading-2 {
+  font-family: var(--font-serif);
+  font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2rem);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  font-weight: 400;
+}
+@utility heading-3 {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  line-height: 1.25;
+  font-weight: 400;
+}
+@utility lede {
+  font-size: 1.125rem;
+  line-height: 1.6;
+  color: var(--muted-ink);
+}
+
+/* --- Layout: page container + section rhythm ----------------------------- */
+/* The design holds content to ~1200px with comfortable gutters. */
+@utility container-page {
+  width: 100%;
+  max-width: 75rem; /* 1200px */
+  margin-inline: auto;
+  padding-inline: 1.25rem; /* 20px mobile */
+}
+@media (min-width: 768px) {
+  .container-page {
+    padding-inline: 2rem; /* 32px tablet+ */
+  }
+}
+/* Vertical rhythm between major sections. */
+@utility section {
+  padding-block: clamp(2.5rem, 1.5rem + 4vw, 4.5rem);
+}
+
+/* --- Depth: the two-rung ladder as utilities ----------------------------- */
+/* A resting card: paper-2/card surface + the single elevation. */
+@utility card-surface {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--elevation);
+}
+/* A floating element: the booking card, the help button. */
+@utility card-float {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--elevation-float);
+}
+
+/* The gold "✓ Inspected 89" stamp seen on every stay card. Numbers inside it
+   still get `.num`. */
+@utility stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  background-color: color-mix(in srgb, var(--gold) 22%, var(--paper));
+  border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent);
+  color: var(--bark);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
