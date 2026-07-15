@@ -17,6 +17,7 @@ export function SectionHeading({
   subtitle,
   action,
   as: Tag = "h2",
+  id,
   className,
 }: {
   eyebrow?: string;
@@ -24,6 +25,8 @@ export function SectionHeading({
   subtitle?: React.ReactNode;
   action?: React.ReactNode;
   as?: "h1" | "h2" | "h3";
+  /** id for the heading, so a `<section aria-labelledby>` can name itself by it. */
+  id?: string;
   className?: string;
 }) {
   return (
@@ -36,7 +39,9 @@ export function SectionHeading({
       <div>
         {eyebrow && <p className="eyebrow text-muted-ink mb-2">{eyebrow}</p>}
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <Tag className="heading-2 text-bark">{title}</Tag>
+          <Tag id={id} className="heading-2 text-bark">
+            {title}
+          </Tag>
           {subtitle && (
             <span className="text-muted-ink text-sm">{subtitle}</span>
           )}

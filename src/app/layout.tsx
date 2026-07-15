@@ -3,7 +3,6 @@ import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
-import { FloatingHelpButton } from "@/components/layout/FloatingHelpButton";
 import { getSiteData } from "@/lib/site";
 
 /**
@@ -41,6 +40,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  // Resolves relative canonical/OG URLs (e.g. "/") to absolute ones.
+  metadataBase: new URL("https://stayze.in"),
   title: {
     default: "Stayze — Plantation stays in Chikmagalur",
     template: "%s · Stayze",
@@ -77,9 +78,6 @@ export default async function RootLayout({
         {/* Every page renders inside this main; the shell wraps it. */}
         <main className="flex flex-1 flex-col">{children}</main>
         <Footer data={site} />
-        <FloatingHelpButton
-          whatsappNumber={site.settings?.whatsappNumber ?? null}
-        />
       </body>
     </html>
   );

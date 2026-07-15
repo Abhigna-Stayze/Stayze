@@ -1,50 +1,131 @@
-import { BadgeCheck, Star } from "lucide-react";
+import type { Metadata } from "next";
+import { Suspense } from "react";
+import { Hero } from "@/components/home/Hero";
+import { TrustBar } from "@/components/home/TrustBar";
+import { FeaturedStays } from "@/components/home/FeaturedStays";
+import { ExperienceCategories } from "@/components/home/ExperienceCategories";
+import { TravelInspiration } from "@/components/home/TravelInspiration";
+import { VerificationChecklist } from "@/components/home/VerificationChecklist";
+import { FinalCTA } from "@/components/home/FinalCTA";
+import { Reveal } from "@/components/home/Reveal";
+import { CardGridSkeleton } from "@/components/home/skeletons";
+
+const DESCRIPTION =
+  "Handpicked, personally inspected plantation stays in Chikmagalur — coffee estates, heritage bungalows and riverside cottages. Every stay is visited before it's listed.";
+
+export const metadata: Metadata = {
+  // `absolute` so the Home title isn't suffixed with the layout's "· Stayze".
+  title: {
+    absolute: "Stayze — Plantation stays in Chikmagalur & the Western Ghats",
+  },
+  description: DESCRIPTION,
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: "Stayze",
+    title: "Stayze — Plantation stays in Chikmagalur",
+    description: DESCRIPTION,
+    images: [
+      {
+        url: "/hero/hero-poster.jpg",
+        width: 1600,
+        height: 900,
+        alt: "A coffee plantation in the Western Ghats at Chikmagalur",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Stayze — Plantation stays in Chikmagalur",
+    description: DESCRIPTION,
+    images: ["/hero/hero-poster.jpg"],
+  },
+};
+
+// Organization structured data — the OG image is a plantation photograph,
+// never the logo, per the brand.
+const organizationJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "Stayze",
+  description: DESCRIPTION,
+  url: "https://stayze.in",
+  areaServed: "Chikmagalur, Karnataka, India",
+};
 
 /**
- * Placeholder — NOT the Home page.
+ * The Home page — the first complete page in the app.
  *
- * Phase 1 builds only the brand foundation; no product pages yet. This page
- * exists so the design system is visible and verifiable: it renders on paper,
- * in Fraunces / Inter / JetBrains Mono, using the token utilities from
- * globals.css. It will be replaced by the real Home page in Phase 2.
+ * A Server Component. It reads no data itself; each data section is an async
+ * Server Component that reads through a `src/lib/home` helper → service layer
+ * (never a self-fetch of the REST API). Those sections stream inside Suspense
+ * boundaries, so the hero paints immediately while the stays, experiences and
+ * guides fill in with skeleton placeholders. The header, footer and floating
+ * help come from the application shell in `layout.tsx`.
  */
-export default function FoundationPlaceholder() {
+export default function HomePage() {
   return (
-    <section className="container-page section flex flex-1 flex-col justify-center">
-      <p className="eyebrow text-muted-ink">Plantation ledger · Chikmagalur</p>
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(organizationJsonLd),
+        }}
+      />
 
-      <h1 className="display mt-3 max-w-2xl">
-        Escape the noise.
-        <br />
-        Stay in the Western Ghats.
-      </h1>
+      <Hero />
+      <TrustBar />
 
-      <p className="lede mt-5 max-w-xl">
-        The design foundation is in place. Fonts, colours, spacing and the
-        design language are configured — every page built next inherits them.
-      </p>
+      <Reveal>
+        <Suspense
+          fallback={
+            <div className="container-page section">
+              <CardGridSkeleton count={3} />
+            </div>
+          }
+        >
+          <FeaturedStays />
+        </Suspense>
+      </Reveal>
 
-      {/* A card, at the one resting elevation, showing the number + stamp rules. */}
-      <div className="card-surface mt-10 max-w-sm p-5">
-        <span className="stamp">
-          <BadgeCheck className="text-mist size-3.5" aria-hidden />
-          Inspected <span className="num">89</span>
-        </span>
+      <Reveal>
+        <Suspense
+          fallback={
+            <div className="bg-paper-2/60 border-border border-y">
+              <div className="container-page section">
+                <CardGridSkeleton
+                  count={4}
+                  columns="sm:grid-cols-2 lg:grid-cols-4"
+                  media="aspect-[4/3]"
+                />
+              </div>
+            </div>
+          }
+        >
+          <ExperienceCategories />
+        </Suspense>
+      </Reveal>
 
-        <h3 className="heading-3 mt-4">CoffeeCharm</h3>
-        <p className="text-muted-ink mt-1 text-sm">Coffee Estate Stay</p>
+      <Reveal>
+        <Suspense
+          fallback={
+            <div className="container-page section">
+              <CardGridSkeleton count={3} />
+            </div>
+          }
+        >
+          <TravelInspiration />
+        </Suspense>
+      </Reveal>
 
-        <div className="border-border mt-4 flex items-baseline justify-between border-t pt-4">
-          <span>
-            <span className="num text-bark text-lg font-medium">₹4,500</span>
-            <span className="text-muted-ink text-sm"> / night</span>
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Star className="fill-gold text-gold size-3.5" aria-hidden />
-            <span className="num text-sm">4.8</span>
-          </span>
-        </div>
-      </div>
-    </section>
+      <Reveal>
+        <FinalCTA />
+      </Reveal>
+
+      <Reveal>
+        <VerificationChecklist />
+      </Reveal>
+    </>
   );
 }

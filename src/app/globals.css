@@ -328,3 +328,49 @@
   letter-spacing: 0.04em;
   white-space: nowrap;
 }
+
+/*
+ * Motion — the brand animates transform and opacity only, sparingly. Two
+ * on-enter treatments used by the Home page. Both are disabled by the global
+ * prefers-reduced-motion backstop above (it forces animation-duration to ~0),
+ * so a reduced-motion visitor simply sees the final state.
+ */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Hero content settling in on first paint. Pair with an [animation-delay:*ms]
+   arbitrary utility to stagger a few elements. */
+@utility animate-fade-up {
+  animation: fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* The scroll-reveal resting state. A `Reveal` client component flips
+   data-revealed to true when the section enters the viewport; until then the
+   section sits slightly down and transparent. Transitions transform+opacity
+   only — never `all`. */
+@utility reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition:
+    opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal[data-revealed="true"] {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
