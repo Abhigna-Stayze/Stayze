@@ -512,6 +512,17 @@ Rules baked into the components so a caller cannot break them: the **FitScore st
 - **Screenshot caveat:** headless captures of this page at `--force-device-scale-factor=2` render the photos blank (decode pressure with ~16 large images at 2×). It is an artifact, not a bug — verify at `=1`.
 - **SEO:** `generateMetadata` (metaTitle/metaDescription with sensible fallbacks), canonical `/stays/[slug]`, Open Graph + Twitter using the hero photo, and **`LodgingBusiness` JSON-LD** — which publishes the locality, geo, price range, amenities and check-in/out, but **never the exact address** (not shown before booking) and **never a zero rating** for an unreviewed stay.
 
+### The booking flow (Phase 7)
+
+`src/app/book/[slug]/page.tsx` — the conversion path. **One screen, two fields.**
+
+- **The shape is deliberate.** The guest already chose the stay, the dates and the party size on the stay page, so asking again is theatre. The trip rides along as a line they can open and change (`Calendar` + `GuestCounter`, collapsed when it arrived prefilled); the only things to type are **a name and a mobile number**. Everything else is composed into the WhatsApp template by the service. No payment step (v1.1 has no payment fields), no account step (there are no accounts).
+- **Hybrid, as agreed.** The page shell is a Server Component reading the stay through `getStayDetail` (server-only helper → service; never a self-fetch), so an unknown slug 404s before anything is typed. The one write goes over **`POST /api/booking`** — the REST path, never a service import. `robots: noindex` — `/stays/[slug]` is the page that should rank.
+- **The booking is persisted before the handoff.** `BookingConfirmation` renders the reference (the largest thing on screen — with no accounts it is the only way back to the trip), then _attempts_ WhatsApp with `window.open` and offers the same link as a button. A popup blocked after an `await` then costs a tap, not the booking.
+- **Validation twice, on purpose.** `src/lib/booking-form.ts` is a **pure** module (Zod only) mirroring `createBookingSchema` — it exists because `schemas.ts` imports `BUCKETS` from `storage.ts` (`server-only`), so a Client Component can't touch it. The server stays the authority; a 422's per-field `issues` are mapped back onto the fields, so drift surfaces where the guest can fix it. Zod's raw text ("Too small: expected string…") is never shown — known fields get a sentence, and a 400 (e.g. "CoffeeCharm sleeps 6. You asked for 9.") is already human and shown verbatim.
+- **No total is quoted before submitting, and `BookingSummary` no longer multiplies rate × nights.** `estimateTotal` prices night by night, so overrides count: a real booking for 2 nights at ₹6,500 came back **₹16,300, not ₹13,000**. The only total shown is the authoritative one `POST /api/booking` returns, on the confirmation.
+- **Verified end to end against the running server**, not just typechecked: a real POST created `STZ-…`, `GET /api/booking/[reference]` confirmed the row (status `NEW`, `caretakerPhone` null until confirmed), the 400 and 422 shapes were driven, and the WhatsApp template was decoded and read. The verification rows were deleted afterwards — the table is back to the 5 seeded bookings.
+
 ## State
 
 Scaffold, **Schema v1.1 migrated and live**, **seeded with development data**, **a working data layer**, **a complete REST API**, **the brand foundation for the UI**, **the application shell**, and **the reusable component library**.

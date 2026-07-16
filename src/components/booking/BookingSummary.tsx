@@ -17,14 +17,20 @@ function formatDate(date: Date | null | undefined): string {
 /**
  * BookingSummary — the card that stays visible through the whole booking flow.
  *
- * Photo, name, the trip's facts on dotted-leader lines, the nightly line item,
- * and the estimated total in large mono. Every figure is mono and recomputes
- * from props — this component derives nothing and fetches nothing; the page
- * passes the current dates, nights and total and the summary just renders them.
+ * Photo, name, the trip's facts on dotted-leader lines, and — once there is a
+ * real one — the estimated total in large mono. Every figure is mono, and this
+ * component derives nothing and fetches nothing: the caller passes the current
+ * dates, nights and total, and the summary renders them.
  *
- * The estimate is honest by construction: the `note` slot carries the "an
- * estimate, not a charge" line, and `action` carries the WhatsApp handoff
- * button. Both are the caller's, so this stays presentational.
+ * **It never multiplies the nightly rate by the nights.** `estimateTotal` in
+ * the booking service prices a stay night by night, so weekend and festival
+ * overrides are included; `base × nights` would quote a figure the server
+ * disagrees with. The only total shown here is the authoritative one that
+ * `POST /api/booking` returns — pass `estimatedTotal` and it appears, omit it
+ * and the card simply doesn't guess.
+ *
+ * The `note` slot carries the "an estimate, not a charge" line and `action`
+ * the WhatsApp handoff, so both stay the caller's.
  */
 export function BookingSummary({
   stay,
@@ -51,7 +57,6 @@ export function BookingSummary({
   className?: string;
 }) {
   const guests = adults !== undefined ? adults + (childGuests ?? 0) : undefined;
-  const showLineItem = nights != null && nights > 0;
 
   return (
     <div className={cn("card-float overflow-hidden", className)}>
@@ -76,26 +81,19 @@ export function BookingSummary({
           {guests !== undefined && <StatItem label="Guests" value={guests} />}
         </div>
 
-        {showLineItem && (
-          <>
-            <hr className="border-border border-t border-dashed" />
-            <StatItem
-              label={
-                <>
-                  <span className="num">
-                    {formatPrice(stay.basePricePerNight, stay.currency)}
-                  </span>{" "}
-                  × <span className="num">{nights}</span>{" "}
-                  {nights === 1 ? "night" : "nights"}
-                </>
-              }
-              value={formatPrice(
-                stay.basePricePerNight * (nights ?? 0),
-                stay.currency,
-              )}
-            />
-          </>
-        )}
+        <hr className="border-border border-t border-dashed" />
+        <StatItem
+          label="Rate"
+          mono={false}
+          value={
+            <>
+              <span className="num">
+                {formatPrice(stay.basePricePerNight, stay.currency)}
+              </span>
+              <span className="text-muted-ink"> /night</span>
+            </>
+          }
+        />
 
         {estimatedTotal != null && (
           <div className="mt-1 flex items-baseline justify-between">
