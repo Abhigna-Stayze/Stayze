@@ -134,11 +134,24 @@ export function Footer({ data }: { data: SiteData }) {
 
         {/* Bottom bar */}
         <div className="border-paper/15 border-t">
-          <Container className="text-paper/50 flex flex-col gap-1 py-5 text-xs sm:flex-row sm:items-center sm:justify-between">
+          <Container className="text-paper/50 flex flex-col gap-3 py-5 text-xs sm:flex-row sm:items-center sm:justify-between">
             <p>
-              © <span className="num">{year}</span> Stayze
+              © <span className="num">{year}</span> Stayze · Made in Chikmagalur
             </p>
-            <p>Made in Chikmagalur · Western Ghats</p>
+            <div className="flex items-center gap-4">
+              <Link
+                href="/privacy"
+                className="text-paper/60 hover:text-gold focus-visible:ring-gold focus-visible:ring-offset-bark transition-colors focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+              >
+                Privacy
+              </Link>
+              <Link
+                href="/terms"
+                className="text-paper/60 hover:text-gold focus-visible:ring-gold focus-visible:ring-offset-bark transition-colors focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+              >
+                Terms
+              </Link>
+            </div>
           </Container>
         </div>
       </div>
