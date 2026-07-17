@@ -24,6 +24,8 @@ const badgeVariants = cva(
         gold: "border-gold/50 bg-gold/18 text-bark",
         // On a dark (bark) surface — hero, footer.
         onDark: "border-paper/25 bg-paper/10 text-paper",
+        // A stopped/cancelled state.
+        error: "border-error/30 bg-error/10 text-error",
         outline: "border-border bg-transparent text-bark",
       },
     },
