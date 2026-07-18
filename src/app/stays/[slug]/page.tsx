@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { breadcrumbJsonLd } from "@/lib/seo";
 import { getStayDetail } from "@/lib/stay";
 import { getSiteData } from "@/lib/site";
 import { StayGallery } from "@/components/stay/StayGallery";
@@ -119,11 +120,21 @@ export default async function StayPage({ params }: { params: Params }) {
       : {}),
   };
 
+  const breadcrumb = breadcrumbJsonLd([
+    { name: "Home", path: "/" },
+    { name: "Explore", path: "/explore" },
+    { name: stay.name, path: `/stays/${stay.slug}` },
+  ]);
+
   return (
     <article className="pb-24 lg:pb-0">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
       />
 
       <div className="container-page pt-5">

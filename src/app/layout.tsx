@@ -3,6 +3,7 @@ import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { Analytics } from "@/components/analytics/Analytics";
 import { getSiteData } from "@/lib/site";
 
 /**
@@ -48,6 +49,22 @@ export const metadata: Metadata = {
   },
   description:
     "Handpicked, personally inspected plantation stays in Chikmagalur and the Western Ghats.",
+  applicationName: "Stayze",
+  // Default Open Graph / Twitter — pages override title, description, url and
+  // images; these fill the shared fields so every page shares one social card
+  // shape, and any page that forgets an image still gets a real one.
+  openGraph: {
+    type: "website",
+    siteName: "Stayze",
+    locale: "en_IN",
+    images: [
+      { url: "/hero/hero-poster.jpg", alt: "Plantation stays in Chikmagalur" },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    images: ["/hero/hero-poster.jpg"],
+  },
 };
 
 // The shell reads live site settings from the database on every page (footer
@@ -74,10 +91,20 @@ export default async function RootLayout({
       className={`${inter.variable} ${fraunces.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
+        {/* Keyboard/screen-reader users can jump the nav straight to content. */}
+        <a
+          href="#main-content"
+          className="bg-clay text-primary-foreground focus-visible:ring-ring sr-only z-[100] rounded-md px-4 py-2 text-sm font-medium focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus-visible:ring-2 focus-visible:ring-offset-2"
+        >
+          Skip to content
+        </a>
         <Header />
         {/* Every page renders inside this main; the shell wraps it. */}
-        <main className="flex flex-1 flex-col">{children}</main>
+        <main id="main-content" className="flex flex-1 flex-col">
+          {children}
+        </main>
         <Footer data={site} />
+        <Analytics />
       </body>
     </html>
   );

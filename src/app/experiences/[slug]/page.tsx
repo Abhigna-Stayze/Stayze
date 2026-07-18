@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { getExperienceDetail } from "@/lib/experiences";
+import { breadcrumbJsonLd } from "@/lib/seo";
 import { getSiteData } from "@/lib/site";
 import { themesFor } from "@/lib/experience-themes";
 import { ExperienceHero } from "@/components/experiences/ExperienceHero";
@@ -86,11 +87,21 @@ export default async function ExperiencePage({ params }: { params: Params }) {
     touristType: "Nature and plantation travellers",
   };
 
+  const breadcrumb = breadcrumbJsonLd([
+    { name: "Home", path: "/" },
+    { name: "Experiences", path: "/experiences" },
+    { name: experience.title, path: `/experiences/${experience.slug}` },
+  ]);
+
   return (
     <article className="pb-16">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
       />
 
       <div className="container-page pt-5">

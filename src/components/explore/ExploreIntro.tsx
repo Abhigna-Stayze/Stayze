@@ -52,13 +52,13 @@ export function ExploreIntro({
             <div className="flex items-center gap-1.5" aria-hidden>
               <span
                 className={
-                  "h-1.5 rounded-full transition-all duration-300 " +
+                  "h-1.5 rounded-full transition-[width,background-color] duration-300 " +
                   (step === 0 ? "bg-clay w-5" : "bg-border w-1.5")
                 }
               />
               <span
                 className={
-                  "h-1.5 rounded-full transition-all duration-300 " +
+                  "h-1.5 rounded-full transition-[width,background-color] duration-300 " +
                   (step === 1 ? "bg-clay w-5" : "bg-border w-1.5")
                 }
               />

@@ -43,15 +43,29 @@ export const metadata: Metadata = {
   },
 };
 
-// Organization structured data — the OG image is a plantation photograph,
-// never the logo, per the brand.
-const organizationJsonLd = {
+// Organization + WebSite structured data, published together via @graph. The
+// OG image is a plantation photograph, never the logo, per the brand.
+const structuredData = {
   "@context": "https://schema.org",
-  "@type": "Organization",
-  name: "Stayze",
-  description: DESCRIPTION,
-  url: "https://stayze.in",
-  areaServed: "Chikmagalur, Karnataka, India",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://stayze.in/#organization",
+      name: "Stayze",
+      description: DESCRIPTION,
+      url: "https://stayze.in",
+      areaServed: "Chikmagalur, Karnataka, India",
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://stayze.in/#website",
+      name: "Stayze",
+      description: DESCRIPTION,
+      url: "https://stayze.in",
+      publisher: { "@id": "https://stayze.in/#organization" },
+      inLanguage: "en-IN",
+    },
+  ],
 };
 
 /**
@@ -70,7 +84,7 @@ export default function HomePage() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(organizationJsonLd),
+          __html: JSON.stringify(structuredData),
         }}
       />
 

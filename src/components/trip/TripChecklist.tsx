@@ -68,7 +68,7 @@ export function TripChecklist({
         {items.map((item) => (
           <li key={item.title} className="card-surface flex gap-3 p-4">
             <span className="bg-mist/12 text-mist inline-flex size-9 shrink-0 items-center justify-center rounded-full">
-              <item.icon className="size-4.5" aria-hidden />
+              <item.icon className="size-4" aria-hidden />
             </span>
             <div>
               <p className="text-bark text-sm font-medium">{item.title}</p>

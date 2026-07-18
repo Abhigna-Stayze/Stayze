@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { getGuideDetail, getGuideExperiences } from "@/lib/guides";
+import { breadcrumbJsonLd } from "@/lib/seo";
 import { getSiteData } from "@/lib/site";
 import { GuideDetailHero } from "@/components/guide/GuideDetailHero";
 import { GuideBody } from "@/components/guide/GuideBody";
@@ -107,11 +108,21 @@ export default async function GuidePage({ params }: { params: Params }) {
     mainEntityOfPage: `https://stayze.in/travel-guide/${guide.slug}`,
   };
 
+  const breadcrumb = breadcrumbJsonLd([
+    { name: "Home", path: "/" },
+    { name: "Travel Guide", path: "/travel-guide" },
+    { name: guide.title, path: `/travel-guide/${guide.slug}` },
+  ]);
+
   return (
     <article className="pb-16">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
       />
 
       <div className="container-page pt-5">
