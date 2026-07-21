@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/layout/Header";
@@ -80,10 +81,12 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // The shell's one data read — the same content GET /api/site returns.
-  // Fetched once here and shared with the footer and the floating help button,
-  // so the WhatsApp number and contacts are never hardcoded.
-  const site = await getSiteData();
+  // The admin CMS has its own chrome (sidebar + top bar), so it must NOT inherit
+  // the public marketing Header/Footer. Middleware sets `x-pathname`; when it's
+  // an /admin route we render a bare shell and skip the site-settings read
+  // entirely. Everything else gets the full public shell.
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  const isAdmin = pathname.startsWith("/admin");
 
   return (
     <html
@@ -91,21 +94,36 @@ export default async function RootLayout({
       className={`${inter.variable} ${fraunces.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
-        {/* Keyboard/screen-reader users can jump the nav straight to content. */}
-        <a
-          href="#main-content"
-          className="bg-clay text-primary-foreground focus-visible:ring-ring sr-only z-[100] rounded-md px-4 py-2 text-sm font-medium focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus-visible:ring-2 focus-visible:ring-offset-2"
-        >
-          Skip to content
-        </a>
-        <Header />
-        {/* Every page renders inside this main; the shell wraps it. */}
-        <main id="main-content" className="flex flex-1 flex-col">
-          {children}
-        </main>
-        <Footer data={site} />
+        {isAdmin ? children : <PublicShell>{children}</PublicShell>}
         <Analytics />
       </body>
     </html>
+  );
+}
+
+/**
+ * The public marketing chrome: skip link, sticky Header, the page `<main>`, and
+ * the Footer with live site contacts. Kept out of the admin routes.
+ */
+async function PublicShell({ children }: { children: React.ReactNode }) {
+  // The shell's one data read — the same content GET /api/site returns. Shared
+  // with the footer and floating help so contacts are never hardcoded.
+  const site = await getSiteData();
+
+  return (
+    <>
+      {/* Keyboard/screen-reader users can jump the nav straight to content. */}
+      <a
+        href="#main-content"
+        className="bg-clay text-primary-foreground focus-visible:ring-ring sr-only z-[100] rounded-md px-4 py-2 text-sm font-medium focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus-visible:ring-2 focus-visible:ring-offset-2"
+      >
+        Skip to content
+      </a>
+      <Header />
+      <main id="main-content" className="flex flex-1 flex-col">
+        {children}
+      </main>
+      <Footer data={site} />
+    </>
   );
 }

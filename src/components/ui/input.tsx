@@ -17,6 +17,7 @@ export function Input({
   hint,
   error,
   mono = false,
+  trailing,
   id,
   className,
   ...props
@@ -25,6 +26,8 @@ export function Input({
   hint?: string;
   error?: string;
   mono?: boolean;
+  /** An adornment pinned to the right of the field, e.g. a show/hide toggle. */
+  trailing?: React.ReactNode;
 }) {
   const generatedId = React.useId();
   const inputId = id ?? generatedId;
@@ -34,7 +37,7 @@ export function Input({
       ? `${inputId}-hint`
       : undefined;
 
-  const field = (
+  const input = (
     <input
       id={inputId}
       aria-invalid={error ? true : undefined}
@@ -42,11 +45,24 @@ export function Input({
       className={cn(
         "border-input bg-card text-ink placeholder:text-muted-ink/70 focus-visible:ring-ring focus-visible:ring-offset-background flex h-11 w-full rounded-md border px-3 text-sm transition-[color,border-color,box-shadow] duration-150 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
         mono && "num",
+        trailing && "pr-11",
         error && "border-error focus-visible:ring-error",
         className,
       )}
       {...props}
     />
+  );
+
+  // A trailing adornment sits over the right edge of the input.
+  const field = trailing ? (
+    <div className="relative">
+      {input}
+      <div className="absolute inset-y-0 right-0 flex items-center pr-1.5">
+        {trailing}
+      </div>
+    </div>
+  ) : (
+    input
   );
 
   if (!label && !hint && !error) return field;

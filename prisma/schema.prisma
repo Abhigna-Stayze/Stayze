@@ -592,3 +592,80 @@ model ContactMessage {
 
   createdAt DateTime @default(now())
 }
+
+// ---------------------------------------------------------------------------
+// Admin authentication (BetterAuth) — Phase 13.1
+//
+// These four models are BetterAuth's required schema, added for the internal
+// admin CMS. They are entirely separate from the customer-facing business
+// models above: the customer portal has no accounts (guests return via a
+// booking reference), so `User` here is an ADMIN operator, not a guest.
+//
+// Model names are PascalCase (Prisma convention); `@@map` pins them to the
+// lowercase table names BetterAuth expects. `role` is a BetterAuth additional
+// field — SUPER_ADMIN only for the MVP; ADMIN / EDITOR are future-ready values.
+// Password hashing, session tokens and cookies are all handled by BetterAuth
+// (src/lib/auth.ts); nothing here stores a plaintext secret.
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  role          String    @default("SUPER_ADMIN") /// SUPER_ADMIN | ADMIN | EDITOR
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+}
+
+// Named `AuthVerification` (not `Verification`) because a business enum
+// `Verification` already exists; BetterAuth is pointed at this model via
+// `verification: { modelName: "authVerification" }` in src/lib/auth-factory.ts.
+model AuthVerification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verification")
+}

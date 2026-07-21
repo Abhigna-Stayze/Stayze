@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "postinstall": "prisma generate && node scripts/copy-swagger.mjs"
+    "postinstall": "prisma generate && node scripts/copy-swagger.mjs",
+    "seed:admin": "tsx prisma/seed-admin.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
@@ -21,6 +22,7 @@
     "@radix-ui/react-dialog": "^1.1.19",
     "@radix-ui/react-slot": "^1.3.0",
     "@supabase/supabase-js": "^2.110.2",
+    "better-auth": "^1.6.23",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.24.0",
