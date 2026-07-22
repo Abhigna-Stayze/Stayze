@@ -12,7 +12,7 @@ import {
   type StayFormValues,
   type StayStatusValue,
 } from "@/lib/stay-form";
-import { StayForm } from "@/components/admin/stays/StayForm";
+import { StayEditorTabs } from "@/components/admin/stays/StayEditorTabs";
 
 export const metadata: Metadata = {
   title: "Edit stay",
@@ -30,9 +30,13 @@ function detailToForm(s: AdminStayDetail): StayFormValues {
     path: i.path,
     url: i.url,
     altText: i.altText,
+    caption: i.caption,
     width: i.width,
     height: i.height,
   });
+  const media = (
+    m: { bucket: string; path: string; url: string | null } | null,
+  ) => (m ? { bucket: m.bucket, path: m.path, url: m.url } : null);
   // The form's status select is Draft/Published/Hidden; treat legacy ARCHIVED
   // as Hidden.
   const status: StayStatusValue =
@@ -44,6 +48,7 @@ function detailToForm(s: AdminStayDetail): StayFormValues {
     ...emptyStayForm,
     ownerName: s.ownerName,
     ownerPhone: s.ownerPhone ?? "",
+    ownerBio: s.ownerBio ?? "",
     ownerPhotoRef: s.ownerPhotoRef
       ? { ...s.ownerPhotoRef, url: s.ownerPhotoUrl }
       : null,
@@ -79,6 +84,34 @@ function detailToForm(s: AdminStayDetail): StayFormValues {
     isFeatured: s.isFeatured,
     metaTitle: s.metaTitle ?? "",
     metaDescription: s.metaDescription ?? "",
+    slug: s.slug,
+    highlights: s.highlights.map((h) => ({
+      label: h.label,
+      icon: h.icon ?? "",
+    })),
+    rooms: s.rooms.map((r) => ({
+      name: r.name,
+      description: r.description ?? "",
+      bedType: r.bedType ?? "",
+      maxGuests: r.maxGuests,
+      image: media(r.image),
+    })),
+    nearbyPlaces: s.nearbyPlaces.map((p) => ({
+      name: p.name,
+      category:
+        p.category as StayFormValues["nearbyPlaces"][number]["category"],
+      description: p.description ?? "",
+      distanceKm: p.distanceKm,
+      driveTimeMinutes: p.driveTimeMinutes,
+      mapsUrl: p.mapsUrl ?? "",
+      image: media(p.image),
+    })),
+    experiences: s.experiences.map((e) => ({
+      id: e.id,
+      title: e.title,
+      description: e.description ?? "",
+      image: media(e.image),
+    })),
     coverImage: hero ? img(hero) : null,
     gallery: rest.map(img),
     menuImageRef: s.menuImageRef
@@ -109,14 +142,25 @@ export default async function EditStayPage({ params }: { params: Params }) {
         <ChevronLeft className="size-4" aria-hidden />
         Back to {stay.name}
       </Link>
-      <h1 className="heading-1 text-bark mt-3">Edit stay</h1>
-      <p className="text-muted-ink mt-1.5">
-        <span className="num">{stay.propertyCode}</span> · {stay.name}
-      </p>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="heading-1 text-bark">Edit stay</h1>
+          <p className="text-muted-ink mt-1.5">
+            <span className="num">{stay.propertyCode}</span> · {stay.name}
+          </p>
+        </div>
+        <a
+          href={`/stays/${stay.slug}?preview=1`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="border-border text-bark hover:bg-paper-2 inline-flex h-10 items-center gap-2 rounded-md border px-4 text-sm font-medium"
+        >
+          Preview
+        </a>
+      </div>
 
       <div className="mt-6">
-        <StayForm
-          mode="edit"
+        <StayEditorTabs
           stayId={stay.id}
           defaultValues={detailToForm(stay)}
           amenities={amenities}

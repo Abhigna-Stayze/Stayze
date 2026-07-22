@@ -140,9 +140,18 @@ export async function getFeaturedStays(limit = 3): Promise<StayCard[]> {
  * Returns null when the slug does not resolve or the stay is not published —
  * the caller should render a 404, not an empty page.
  */
-export async function getStayBySlug(slug: string): Promise<StayDetail | null> {
+export async function getStayBySlug(
+  slug: string,
+  opts: { includeUnpublished?: boolean } = {},
+): Promise<StayDetail | null> {
   const stay = await prisma.stay.findFirst({
-    where: { slug, ...PUBLISHED },
+    // `includeUnpublished` is for the admin preview only — the page that calls
+    // it with this flag has already checked for a SUPER_ADMIN session.
+    where: {
+      slug,
+      deletedAt: null,
+      ...(opts.includeUnpublished ? {} : PUBLISHED),
+    },
     include: {
       owner: true,
       images: { orderBy: { sortOrder: "asc" } },

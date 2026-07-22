@@ -44,13 +44,73 @@ export const mediaRefSchema = z.object({
   url: z.string().optional().nullable(),
 });
 
-/** A gallery image carries a little extra: alt text and intrinsic size. */
+/** A gallery image carries a little extra: alt text, caption, intrinsic size. */
 export const galleryImageSchema = mediaRefSchema.extend({
   altText: z.string().trim().max(200).optional().nullable(),
+  caption: z.string().trim().max(200).optional().nullable(),
   width: z.number().int().positive().optional().nullable(),
   height: z.number().int().positive().optional().nullable(),
 });
 export type GalleryImage = z.infer<typeof galleryImageSchema>;
+
+/** Place categories, mirroring the Prisma `PlaceCategory` enum. */
+export const PLACE_CATEGORIES = [
+  "WATERFALL",
+  "VIEWPOINT",
+  "TREK",
+  "CAFE",
+  "TEMPLE",
+  "ESTATE",
+  "LAKE",
+  "OTHER",
+] as const;
+
+/** A stay highlight — label + optional icon key. Order comes from the array. */
+export const highlightSchema = z.object({
+  label: z.string().trim().min(1, "A label is required.").max(80),
+  icon: z.string().trim().max(40).optional().nullable(),
+});
+export type HighlightItem = z.infer<typeof highlightSchema>;
+
+/** A room. No price column exists on Room, so there's no price here. */
+export const roomSchema = z.object({
+  name: z.string().trim().min(1, "Room name is required.").max(120),
+  description: z.string().trim().max(1000).optional().nullable(),
+  bedType: z.string().trim().max(80).optional().nullable(),
+  maxGuests: z.coerce.number().int().min(1, "At least one guest."),
+  image: mediaRefSchema.nullish(),
+});
+export type RoomItem = z.infer<typeof roomSchema>;
+
+/** A nearby place. */
+export const nearbyPlaceSchema = z.object({
+  name: z.string().trim().min(1, "Place name is required.").max(120),
+  category: z.enum(PLACE_CATEGORIES),
+  description: z.string().trim().max(500).optional().nullable(),
+  distanceKm: z.preprocess(
+    (v) => (v === "" || v == null ? null : v),
+    z.coerce.number().nonnegative().nullable(),
+  ),
+  driveTimeMinutes: z.preprocess(
+    (v) => (v === "" || v == null ? null : v),
+    z.coerce.number().int().nonnegative().nullable(),
+  ),
+  mapsUrl: z.string().trim().url().optional().or(z.literal("")),
+  image: mediaRefSchema.nullish(),
+});
+export type NearbyItem = z.infer<typeof nearbyPlaceSchema>;
+
+/**
+ * A stay experience. `id` links to an existing (shared) Experience; a new item
+ * has no id and the service creates one. Editing here edits the shared entity.
+ */
+export const experienceSchema = z.object({
+  id: z.string().optional().nullable(),
+  title: z.string().trim().min(1, "Title is required.").max(120),
+  description: z.string().trim().max(1000).optional().nullable(),
+  image: mediaRefSchema.nullish(),
+});
+export type ExperienceItem = z.infer<typeof experienceSchema>;
 
 /** A phone number — lenient (owners give many formats), digits-ish, 7–20 chars. */
 const phone = z
@@ -76,6 +136,7 @@ export const stayFormSchema = z.object({
   // --- Section 1 · Owner ---
   ownerName: z.string().trim().min(2, "Owner name is required."),
   ownerPhone: phone,
+  ownerBio: optionalText(2000),
   ownerPhotoRef: mediaRefSchema.nullish(),
 
   // --- Section 2 · Property ---
@@ -103,6 +164,12 @@ export const stayFormSchema = z.object({
   checkInTime: z.string().trim().min(1, "Check-in time is required."),
   checkOutTime: z.string().trim().min(1, "Check-out time is required."),
 
+  // --- Nested collections (existing models) ---
+  highlights: z.array(highlightSchema).default([]),
+  rooms: z.array(roomSchema).default([]),
+  nearbyPlaces: z.array(nearbyPlaceSchema).default([]),
+  experiences: z.array(experienceSchema).default([]),
+
   // --- Section 3 · Amenities ---
   amenityIds: z.array(z.string()).default([]),
 
@@ -118,6 +185,7 @@ export const stayFormSchema = z.object({
   isFeatured: z.boolean().default(false),
   metaTitle: optionalText(160),
   metaDescription: optionalText(300),
+  slug: optionalText(80),
 
   // --- Media ---
   coverImage: galleryImageSchema.nullish(), // the hero
@@ -129,10 +197,14 @@ export const stayFormSchema = z.object({
 
 export type StayFormValues = z.infer<typeof stayFormSchema>;
 
+/** The form's *input* shape (before Zod coerces/transforms). Used by RHF. */
+export type StayFormInput = z.input<typeof stayFormSchema>;
+
 /** The empty form — sensible defaults for a fresh draft. */
 export const emptyStayForm: StayFormValues = {
   ownerName: "",
   ownerPhone: "",
+  ownerBio: "",
   ownerPhotoRef: null,
   name: "",
   type: "",
@@ -152,7 +224,12 @@ export const emptyStayForm: StayFormValues = {
   distanceFromTownKm: null,
   checkInTime: "2:00 PM",
   checkOutTime: "11:00 AM",
+  highlights: [],
+  rooms: [],
+  nearbyPlaces: [],
+  experiences: [],
   amenityIds: [],
+  slug: "",
   status: "DRAFT",
   verification: "DIRECTORY",
   fitScore: null,

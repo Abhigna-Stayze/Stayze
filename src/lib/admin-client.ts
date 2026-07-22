@@ -81,6 +81,48 @@ export function deleteStay(id: string) {
   });
 }
 
+export function moderateReview(reviewId: string, isPublished: boolean) {
+  return request(`/api/admin/reviews/${reviewId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ isPublished }),
+  });
+}
+
+export function removeReview(reviewId: string) {
+  return request(`/api/admin/reviews/${reviewId}`, { method: "DELETE" });
+}
+
+export type AvailabilityDay = {
+  date: string;
+  status: string;
+  priceOverride: number | null;
+};
+
+export function getAvailability(stayId: string, from: string, to: string) {
+  return request<AvailabilityDay[]>(
+    `/api/admin/stays/${stayId}/availability?from=${from}&to=${to}`,
+  );
+}
+
+export function mutateAvailability(
+  stayId: string,
+  body:
+    | {
+        action: "set";
+        dates: string[];
+        status: "AVAILABLE" | "BLOCKED";
+        priceOverride?: number | null;
+      }
+    | { action: "clear"; dates: string[] },
+) {
+  return request(`/api/admin/stays/${stayId}/availability`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export type UploadedImage = {
   bucket: string;
   path: string;

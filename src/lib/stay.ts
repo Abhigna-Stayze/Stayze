@@ -29,6 +29,22 @@ export const getStayDetail = cache(
   },
 );
 
+/**
+ * Admin preview — the stay regardless of status, so a SUPER_ADMIN can see a
+ * draft before publishing. The caller (the stay page) verifies the session
+ * first; this helper trusts that check.
+ */
+export const getStayDetailPreview = cache(
+  async (slug: string): Promise<StayDetail | null> => {
+    try {
+      return await getStayBySlug(slug, { includeUnpublished: true });
+    } catch (error) {
+      console.error(`[stay] preview failed for "${slug}":`, error);
+      return null;
+    }
+  },
+);
+
 export const getRelated = cache(async (stayId: string): Promise<StayCard[]> => {
   try {
     return await getRelatedStays(stayId, 3);

@@ -1,4 +1,5 @@
 import "server-only";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getPublicUrlOrNull, deleteFile, type MediaRef } from "@/lib/storage";
 import { num, numReq } from "@/services/mappers";
@@ -45,10 +46,37 @@ export type AdminStayImage = {
   path: string;
   url: string | null;
   altText: string | null;
+  caption: string | null;
   isHero: boolean;
   sortOrder: number;
   width: number | null;
   height: number | null;
+};
+
+export type AdminHighlight = { label: string; icon: string | null };
+export type AdminRoom = {
+  id: string;
+  name: string;
+  description: string | null;
+  bedType: string | null;
+  maxGuests: number;
+  image: (MediaRef & { url: string | null }) | null;
+};
+export type AdminNearby = {
+  id: string;
+  name: string;
+  category: string;
+  description: string | null;
+  distanceKm: number | null;
+  driveTimeMinutes: number | null;
+  mapsUrl: string | null;
+  image: (MediaRef & { url: string | null }) | null;
+};
+export type AdminExperience = {
+  id: string;
+  title: string;
+  description: string | null;
+  image: (MediaRef & { url: string | null }) | null;
 };
 
 export type AdminStayDetail = {
@@ -90,8 +118,13 @@ export type AdminStayDetail = {
   isFeatured: boolean;
   metaTitle: string | null;
   metaDescription: string | null;
+  ownerBio: string | null;
   amenityIds: string[];
   images: AdminStayImage[];
+  highlights: AdminHighlight[];
+  rooms: AdminRoom[];
+  nearbyPlaces: AdminNearby[];
+  experiences: AdminExperience[];
   menuImageUrl: string | null;
   menuImageRef: MediaRef | null;
   createdAt: Date;
@@ -258,6 +291,13 @@ export async function getStayForAdmin(
       owner: true,
       images: { orderBy: { sortOrder: "asc" } },
       amenities: { select: { amenityId: true } },
+      highlights: { orderBy: { sortOrder: "asc" } },
+      rooms: { orderBy: { sortOrder: "asc" } },
+      nearbyPlaces: { orderBy: { sortOrder: "asc" } },
+      experiences: {
+        orderBy: { sortOrder: "asc" },
+        include: { experience: true },
+      },
     },
   });
   if (!stay) return null;
@@ -313,6 +353,7 @@ export async function getStayForAdmin(
     isFeatured: stay.isFeatured,
     metaTitle: stay.metaTitle,
     metaDescription: stay.metaDescription,
+    ownerBio: stay.owner.bio,
     amenityIds: stay.amenities.map((a) => a.amenityId),
     images: stay.images.map((img) => ({
       id: img.id,
@@ -320,10 +361,36 @@ export async function getStayForAdmin(
       path: img.path,
       url: getPublicUrlOrNull(img),
       altText: img.altText,
+      caption: img.caption,
       isHero: img.isHero,
       sortOrder: img.sortOrder,
       width: img.width,
       height: img.height,
+    })),
+    highlights: stay.highlights.map((h) => ({ label: h.label, icon: h.icon })),
+    rooms: stay.rooms.map((r) => ({
+      id: r.id,
+      name: r.name,
+      description: r.description,
+      bedType: r.bedType,
+      maxGuests: r.maxGuests,
+      image: mediaWithUrl(r.imageBucket, r.imagePath),
+    })),
+    nearbyPlaces: stay.nearbyPlaces.map((p) => ({
+      id: p.id,
+      name: p.name,
+      category: p.category,
+      description: p.description,
+      distanceKm: num(p.distanceKm),
+      driveTimeMinutes: p.driveTimeMinutes,
+      mapsUrl: p.mapsUrl,
+      image: mediaWithUrl(p.imageBucket, p.imagePath),
+    })),
+    experiences: stay.experiences.map((link) => ({
+      id: link.experience.id,
+      title: link.experience.title,
+      description: link.experience.excerpt ?? link.experience.story,
+      image: mediaWithUrl(link.experience.bucket, link.experience.path),
     })),
     menuImageUrl: getPublicUrlOrNull({
       bucket: stay.menuImageBucket,
@@ -358,6 +425,7 @@ export async function createStay(
       data: {
         name: input.ownerName.trim(),
         phone: emptyToNull(input.ownerPhone),
+        bio: emptyToNull(input.ownerBio),
         photoBucket: input.ownerPhotoRef?.bucket ?? null,
         photoPath: input.ownerPhotoRef?.path ?? null,
       },
@@ -375,22 +443,12 @@ export async function createStay(
         amenities: {
           create: input.amenityIds.map((amenityId) => ({ amenityId })),
         },
-        images: {
-          create: desiredImages.map((img, i) => ({
-            bucket: img.bucket,
-            path: img.path,
-            altText: img.altText ?? null,
-            mediaType: "PHOTO" as const,
-            isHero: i === 0,
-            sortOrder: i,
-            width: img.width ?? null,
-            height: img.height ?? null,
-          })),
-        },
+        images: { create: imageCreateData(desiredImages) },
       },
       select: { id: true, slug: true },
     });
 
+    await replaceNested(tx, stay.id, input);
     return stay;
   });
 
@@ -412,6 +470,8 @@ export async function updateStay(
       menuImagePath: true,
       owner: { select: { photoBucket: true, photoPath: true } },
       images: { select: { id: true, bucket: true, path: true } },
+      rooms: { select: { imageBucket: true, imagePath: true } },
+      nearbyPlaces: { select: { imageBucket: true, imagePath: true } },
     },
   });
   if (!existing) throw new StayAdminError("That stay no longer exists.");
@@ -434,6 +494,24 @@ export async function updateStay(
     { bucket: existing.menuImageBucket, path: existing.menuImagePath },
     input.menuImageRef ?? null,
   );
+  // Nested images (rooms + nearby) are delete-and-recreate, so any old object
+  // not present in the new set orphans.
+  const oldNestedRefs = [...existing.rooms, ...existing.nearbyPlaces]
+    .map((r) => ({ bucket: r.imageBucket, path: r.imagePath }))
+    .filter((r): r is MediaRef => Boolean(r.bucket && r.path));
+  const newNestedKeys = new Set(
+    [...input.rooms, ...input.nearbyPlaces]
+      .map((r) => r.image)
+      .filter((r): r is MediaRef => Boolean(r?.bucket && r?.path))
+      .map((r) => `${r.bucket}/${r.path}`),
+  );
+  const staleNested = oldNestedRefs.filter(
+    (r) => !newNestedKeys.has(`${r.bucket}/${r.path}`),
+  );
+
+  const slug = input.slug?.trim()
+    ? await uniqueSlug(input.slug, id)
+    : existing.slug;
 
   await prisma.$transaction(async (tx) => {
     await tx.owner.update({
@@ -441,6 +519,7 @@ export async function updateStay(
       data: {
         name: input.ownerName.trim(),
         phone: emptyToNull(input.ownerPhone),
+        bio: emptyToNull(input.ownerBio),
         photoBucket: input.ownerPhotoRef?.bucket ?? null,
         photoPath: input.ownerPhotoRef?.path ?? null,
       },
@@ -450,6 +529,7 @@ export async function updateStay(
       where: { id },
       data: {
         ...scalarData(input),
+        slug,
         menuImageBucket: input.menuImageRef?.bucket ?? "stays",
         menuImagePath: input.menuImageRef?.path ?? null,
       },
@@ -479,24 +559,33 @@ export async function updateStay(
           bucket: img.bucket,
           path: img.path,
           altText: img.altText ?? null,
+          caption: img.caption ?? null,
           mediaType: "PHOTO",
           isHero: i === 0,
           sortOrder: i,
           width: img.width ?? null,
           height: img.height ?? null,
         },
-        update: { isHero: i === 0, sortOrder: i, altText: img.altText ?? null },
+        update: {
+          isHero: i === 0,
+          sortOrder: i,
+          altText: img.altText ?? null,
+          caption: img.caption ?? null,
+        },
       });
     }
+
+    await replaceNested(tx, id, input);
   });
 
   // Bin orphaned objects after the DB is consistent. Failures are logged, not
   // thrown — a wasted file beats reporting failure for a save that succeeded.
   for (const img of removedImages) await deleteQuietly(img);
+  for (const ref of staleNested) await deleteQuietly(ref);
   if (staleOwnerPhoto) await deleteQuietly(staleOwnerPhoto);
   if (staleMenu) await deleteQuietly(staleMenu);
 
-  return { id: existing.id, slug: existing.slug };
+  return { id: existing.id, slug };
 }
 
 /** Publish / unpublish / hide. Publishing needs a cover image. */
@@ -513,6 +602,105 @@ export async function setStayStatus(
     throw new StayAdminError("Add a cover photo before publishing.");
   }
   await prisma.stay.update({ where: { id }, data: { status } });
+}
+
+// ---------------------------------------------------------------------------
+// Reviews (moderation) and Availability — sibling collections, edited on their
+// own tabs rather than through the big save.
+// ---------------------------------------------------------------------------
+
+export type AdminReview = {
+  id: string;
+  guestName: string;
+  rating: number;
+  title: string | null;
+  comment: string;
+  stayedOn: Date | null;
+  source: string;
+  isPublished: boolean;
+  imageCount: number;
+};
+
+/** Every review for a stay — pending first — for the moderation tab. */
+export async function getStayReviewsForAdmin(
+  stayId: string,
+): Promise<AdminReview[]> {
+  const reviews = await prisma.review.findMany({
+    where: { stayId },
+    orderBy: [{ isPublished: "asc" }, { stayedOn: "desc" }],
+    include: { _count: { select: { images: true } } },
+  });
+  return reviews.map((r) => ({
+    id: r.id,
+    guestName: r.guestName,
+    rating: r.rating,
+    title: r.title,
+    comment: r.comment,
+    stayedOn: r.stayedOn,
+    source: r.source,
+    isPublished: r.isPublished,
+    imageCount: r._count.images,
+  }));
+}
+
+export type AdminAvailabilityDay = {
+  date: string; // YYYY-MM-DD
+  status: string;
+  priceOverride: number | null;
+};
+
+/** Raw availability rows in a range — for the calendar (status + override). */
+export async function getAvailabilityForAdmin(
+  stayId: string,
+  from: Date,
+  to: Date,
+): Promise<AdminAvailabilityDay[]> {
+  const days = await prisma.stayAvailability.findMany({
+    where: { stayId, date: { gte: from, lte: to } },
+    orderBy: { date: "asc" },
+  });
+  return days.map((d) => ({
+    date: d.date.toISOString().slice(0, 10),
+    status: d.status,
+    priceOverride: num(d.priceOverride),
+  }));
+}
+
+/** Block/unblock or price dates. BOOKED is never set here — that's the booking
+ *  flow's job — so the admin can't accidentally fake a booking. */
+export async function setAvailability(
+  stayId: string,
+  dates: string[],
+  status: "AVAILABLE" | "BLOCKED",
+  priceOverride: number | null,
+): Promise<void> {
+  const stay = await prisma.stay.findFirst({
+    where: { id: stayId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!stay) throw new StayAdminError("That stay no longer exists.");
+
+  for (const d of dates) {
+    const date = new Date(`${d}T00:00:00.000Z`);
+    await prisma.stayAvailability.upsert({
+      where: { stayId_date: { stayId, date } },
+      create: { stayId, date, status, priceOverride },
+      update: { status, priceOverride },
+    });
+  }
+}
+
+/** Remove overrides for these dates — back to the default (available, base price). */
+export async function clearAvailability(
+  stayId: string,
+  dates: string[],
+): Promise<void> {
+  await prisma.stayAvailability.deleteMany({
+    where: {
+      stayId,
+      date: { in: dates.map((d) => new Date(`${d}T00:00:00.000Z`)) },
+    },
+  });
 }
 
 /**
@@ -622,22 +810,190 @@ async function nextPropertyCode(): Promise<string> {
   return `P${String(max + 1).padStart(3, "0")}`;
 }
 
-/** A URL-safe, unique slug from the name. */
-async function uniqueSlug(name: string): Promise<string> {
-  const base =
-    name
+function slugify(value: string): string {
+  return (
+    value
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
-      .slice(0, 60) || "stay";
+      .slice(0, 60) || "stay"
+  );
+}
 
+/** A URL-safe, unique stay slug. `excludeId` lets a stay keep its own slug. */
+async function uniqueSlug(value: string, excludeId?: string): Promise<string> {
+  const base = slugify(value);
   let slug = base;
   let n = 2;
   // The unique index is the real guard; this just avoids an obvious clash.
-  while (
-    await prisma.stay.findUnique({ where: { slug }, select: { id: true } })
-  ) {
+  for (;;) {
+    const clash = await prisma.stay.findUnique({
+      where: { slug },
+      select: { id: true },
+    });
+    if (!clash || clash.id === excludeId) break;
+    slug = `${base}-${n++}`;
+  }
+  return slug;
+}
+
+// --- Nested collection helpers ---
+
+type Tx = Prisma.TransactionClient;
+
+/** The StayImage rows for a create — cover first (hero), then gallery. */
+function imageCreateData(images: ReturnType<typeof orderImages>) {
+  return images.map((img, i) => ({
+    bucket: img.bucket,
+    path: img.path,
+    altText: img.altText ?? null,
+    caption: img.caption ?? null,
+    mediaType: "PHOTO" as const,
+    isHero: i === 0,
+    sortOrder: i,
+    width: img.width ?? null,
+    height: img.height ?? null,
+  }));
+}
+
+/** A media ref + its public URL, or null. */
+function mediaWithUrl(
+  bucket: string | null,
+  path: string | null,
+): (MediaRef & { url: string | null }) | null {
+  if (!bucket || !path) return null;
+  return { bucket, path, url: getPublicUrlOrNull({ bucket, path }) };
+}
+
+/**
+ * Replace a stay's highlights, rooms and nearby places (delete-and-recreate —
+ * they're small, keyless collections), and reconcile its experiences.
+ * Storage-orphan cleanup for room/nearby images is handled by the caller.
+ */
+async function replaceNested(
+  tx: Tx,
+  stayId: string,
+  input: StayFormValues,
+): Promise<void> {
+  await tx.stayHighlight.deleteMany({ where: { stayId } });
+  if (input.highlights.length > 0) {
+    await tx.stayHighlight.createMany({
+      data: input.highlights.map((h, i) => ({
+        stayId,
+        label: h.label.trim(),
+        icon: emptyToNull(h.icon),
+        sortOrder: i,
+      })),
+    });
+  }
+
+  await tx.room.deleteMany({ where: { stayId } });
+  if (input.rooms.length > 0) {
+    await tx.room.createMany({
+      data: input.rooms.map((r, i) => ({
+        stayId,
+        name: r.name.trim(),
+        description: emptyToNull(r.description),
+        bedType: emptyToNull(r.bedType),
+        maxGuests: r.maxGuests,
+        imageBucket: r.image?.bucket ?? null,
+        imagePath: r.image?.path ?? null,
+        sortOrder: i,
+      })),
+    });
+  }
+
+  await tx.nearbyPlace.deleteMany({ where: { stayId } });
+  if (input.nearbyPlaces.length > 0) {
+    await tx.nearbyPlace.createMany({
+      data: input.nearbyPlaces.map((p, i) => ({
+        stayId,
+        name: p.name.trim(),
+        category: p.category,
+        description: emptyToNull(p.description),
+        distanceKm: p.distanceKm ?? null,
+        driveTimeMinutes: p.driveTimeMinutes ?? null,
+        mapsUrl: emptyToNull(p.mapsUrl),
+        imageBucket: p.image?.bucket ?? null,
+        imagePath: p.image?.path ?? null,
+        sortOrder: i,
+      })),
+    });
+  }
+
+  await syncExperiences(tx, stayId, input.experiences);
+}
+
+/**
+ * Reconcile the stay's experiences. An item with an `id` updates that shared
+ * Experience; a new item creates one. Links (StayExperience) carry the order.
+ * Removed experiences are *unlinked*, not deleted — the Experience may be shared
+ * with another stay.
+ */
+async function syncExperiences(
+  tx: Tx,
+  stayId: string,
+  items: StayFormValues["experiences"],
+): Promise<void> {
+  const existing = await tx.stayExperience.findMany({
+    where: { stayId },
+    select: { experienceId: true },
+  });
+  const keep = new Set<string>();
+
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    const data = {
+      title: it.title.trim(),
+      excerpt: emptyToNull(it.description),
+      story: it.description?.trim() || it.title.trim(),
+      bucket: it.image?.bucket ?? null,
+      path: it.image?.path ?? null,
+      isPublished: true,
+    };
+
+    let experienceId: string;
+    if (it.id) {
+      await tx.experience.update({ where: { id: it.id }, data });
+      experienceId = it.id;
+    } else {
+      const slug = await uniqueExperienceSlug(tx, it.title);
+      const created = await tx.experience.create({
+        data: { ...data, slug },
+        select: { id: true },
+      });
+      experienceId = created.id;
+    }
+    keep.add(experienceId);
+
+    await tx.stayExperience.upsert({
+      where: { stayId_experienceId: { stayId, experienceId } },
+      create: { stayId, experienceId, sortOrder: i },
+      update: { sortOrder: i },
+    });
+  }
+
+  const stale = existing
+    .map((e) => e.experienceId)
+    .filter((eid) => !keep.has(eid));
+  if (stale.length > 0) {
+    await tx.stayExperience.deleteMany({
+      where: { stayId, experienceId: { in: stale } },
+    });
+  }
+}
+
+async function uniqueExperienceSlug(tx: Tx, title: string): Promise<string> {
+  const base = slugify(title);
+  let slug = base;
+  let n = 2;
+  for (;;) {
+    const clash = await tx.experience.findUnique({
+      where: { slug },
+      select: { id: true },
+    });
+    if (!clash) break;
     slug = `${base}-${n++}`;
   }
   return slug;

@@ -18,6 +18,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ImageField, GalleryField } from "@/components/admin/stays/ImageInputs";
+import {
+  HighlightsEditor,
+  RoomsEditor,
+  ExperiencesEditor,
+  NearbyEditor,
+} from "@/components/admin/stays/CollectionEditors";
 
 /** The form's *input* shape (before Zod coerces/transforms to StayFormValues). */
 type FormInput = z.input<typeof stayFormSchema>;
@@ -139,6 +145,14 @@ export function StayForm({
             error={err("ownerPhone")}
             {...register("ownerPhone")}
           />
+          <div className="sm:col-span-2">
+            <Textarea
+              label="Host description"
+              rows={3}
+              error={err("ownerBio")}
+              {...register("ownerBio")}
+            />
+          </div>
           <div className="sm:col-span-2 sm:max-w-xs">
             <Label>Owner photo</Label>
             <Controller
@@ -296,6 +310,27 @@ export function StayForm({
         </div>
       </Section>
 
+      {/* Highlights */}
+      <Section
+        title="Highlights"
+        description="Short badges shown near the top (Free breakfast, Bonfire, 2 Acres…)."
+      >
+        <HighlightsEditor control={control} register={register} />
+      </Section>
+
+      {/* Rooms */}
+      <Section title="Rooms" description="The rooms guests can book.">
+        <RoomsEditor control={control} register={register} />
+      </Section>
+
+      {/* Experiences */}
+      <Section
+        title="Experiences"
+        description="The “What you’ll experience” section on the stay page."
+      >
+        <ExperiencesEditor control={control} register={register} />
+      </Section>
+
       {/* 5 · Amenities */}
       <Section title="Amenities" description="What the property offers.">
         <Controller
@@ -329,6 +364,14 @@ export function StayForm({
             );
           }}
         />
+      </Section>
+
+      {/* Nearby places */}
+      <Section
+        title="Nearby places"
+        description="Attractions around the stay — waterfalls, viewpoints, cafés."
+      >
+        <NearbyEditor control={control} register={register} />
       </Section>
 
       {/* 6 · Photos */}
@@ -460,6 +503,19 @@ export function StayForm({
             error={err("metaDescription")}
             {...register("metaDescription")}
           />
+          <Input
+            label="Slug (URL)"
+            hint={
+              mode === "edit"
+                ? "Changing this changes the public URL."
+                : "Auto-generated from the name."
+            }
+            mono
+            error={err("slug")}
+            disabled={mode === "create"}
+            {...register("slug")}
+          />
+          <div />
           <label className="text-bark flex cursor-pointer items-center gap-2.5 text-sm sm:col-span-2">
             <input
               type="checkbox"

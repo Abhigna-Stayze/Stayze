@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { Suspense } from "react";
 import { breadcrumbJsonLd } from "@/lib/seo";
-import { getStayDetail } from "@/lib/stay";
+import { getStayDetail, getStayDetailPreview } from "@/lib/stay";
 import { getSiteData } from "@/lib/site";
+import { auth } from "@/lib/auth";
 import { StayGallery } from "@/components/stay/StayGallery";
 import { StayHeader } from "@/components/stay/StayHeader";
 import { StayStory } from "@/components/stay/StayStory";
@@ -70,9 +72,28 @@ export async function generateMetadata({
  * against an OTA listing — it deliberately publishes the locality, never the
  * exact address, which is not shown before booking.
  */
-export default async function StayPage({ params }: { params: Params }) {
+export default async function StayPage({
+  params,
+  searchParams,
+}: {
+  params: Params;
+  searchParams: Promise<{ preview?: string }>;
+}) {
   const { slug } = await params;
-  const [stay, site] = await Promise.all([getStayDetail(slug), getSiteData()]);
+
+  // Admin preview: with ?preview=1 and a SUPER_ADMIN session, show the stay
+  // whatever its status (so a draft can be checked before publishing).
+  const wantsPreview = (await searchParams).preview === "1";
+  let previewing = false;
+  if (wantsPreview) {
+    const session = await auth.api.getSession({ headers: await headers() });
+    previewing = session?.user.role === "SUPER_ADMIN";
+  }
+
+  const [stay, site] = await Promise.all([
+    previewing ? getStayDetailPreview(slug) : getStayDetail(slug),
+    getSiteData(),
+  ]);
   if (!stay) notFound();
 
   const whatsappNumber = site.settings?.whatsappNumber ?? null;
@@ -136,6 +157,13 @@ export default async function StayPage({ params }: { params: Params }) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
       />
+
+      {previewing && (
+        <div className="bg-clay text-primary-foreground px-4 py-2 text-center text-sm font-medium">
+          Admin preview — draft/unpublished stays are shown here but are not
+          visible to the public.
+        </div>
+      )}
 
       <div className="container-page pt-5">
         <StayGallery images={stay.images} />
