@@ -12,10 +12,16 @@ export function Pagination({
   page,
   pageCount,
   total,
+  noun = "stay",
+  nounPlural,
 }: {
   page: number;
   pageCount: number;
   total: number;
+  /** The thing being counted — defaults to "stay". */
+  noun?: string;
+  /** Plural form, if not just `noun + "s"`. */
+  nounPlural?: string;
 }) {
   const pathname = usePathname();
   const params = useSearchParams();
@@ -37,7 +43,7 @@ export function Pagination({
     <div className="flex items-center justify-between gap-4">
       <p className="text-muted-ink text-sm">
         <span className="num text-bark font-medium">{total}</span>{" "}
-        {total === 1 ? "stay" : "stays"} · page{" "}
+        {total === 1 ? noun : (nounPlural ?? `${noun}s`)} · page{" "}
         <span className="num">{page}</span> of{" "}
         <span className="num">{pageCount}</span>
       </p>

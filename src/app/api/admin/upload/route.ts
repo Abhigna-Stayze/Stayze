@@ -12,8 +12,8 @@ import { getPublicUrl, uploadFile, type Bucket } from "@/lib/storage";
  * a row — the stay's images are written when the form is saved (the payload
  * carries the refs), so uploads work before a draft even has an id.
  *
- * Fields: `file`, `kind` (owner-photo → `owners` bucket, everything else →
- * `stays`), optional `width`/`height` (read client-side, echoed back so the
+ * Fields: `file`, `kind` (owner-photo → `owners`, experience → `experiences`,
+ * everything else → `stays`), optional `width`/`height` (read client-side, echoed back so the
  * gallery can avoid layout shift). The **path is generated server-side** — a
  * random object key — so a client can never choose where bytes land.
  *
@@ -63,7 +63,12 @@ export async function POST(request: Request) {
     }
 
     const kind = String(form.get("kind") ?? "");
-    const bucket: Bucket = kind === "owner-photo" ? "owners" : "stays";
+    const bucket: Bucket =
+      kind === "owner-photo"
+        ? "owners"
+        : kind === "experience"
+          ? "experiences"
+          : "stays";
     const path = `admin/${randomUUID()}.${EXT[contentType] ?? "jpg"}`;
 
     const width = numOrNull(form.get("width"));

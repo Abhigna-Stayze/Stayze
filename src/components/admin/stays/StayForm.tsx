@@ -14,6 +14,8 @@ import {
 } from "@/lib/stay-form";
 import { createStay, updateStay, type ApiError } from "@/lib/admin-client";
 import type { AmenityOption } from "@/services/admin-stay.service";
+import type { ExperienceLinkOption } from "@/services/admin-experience.service";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,7 +23,6 @@ import { ImageField, GalleryField } from "@/components/admin/stays/ImageInputs";
 import {
   HighlightsEditor,
   RoomsEditor,
-  ExperiencesEditor,
   NearbyEditor,
 } from "@/components/admin/stays/CollectionEditors";
 
@@ -77,11 +78,13 @@ export function StayForm({
   stayId,
   defaultValues,
   amenities,
+  experiences,
 }: {
   mode: "create" | "edit";
   stayId?: string;
   defaultValues: StayFormValues;
   amenities: AmenityOption[];
+  experiences: ExperienceLinkOption[];
 }) {
   const router = useRouter();
   const {
@@ -323,12 +326,60 @@ export function StayForm({
         <RoomsEditor control={control} register={register} />
       </Section>
 
-      {/* Experiences */}
+      {/* Experiences — tick which managed experiences this stay offers. */}
       <Section
         title="Experiences"
-        description="The “What you’ll experience” section on the stay page."
+        description="Tick the experiences this stay offers. They’re created and edited in the Experiences module."
       >
-        <ExperiencesEditor control={control} register={register} />
+        {experiences.length === 0 ? (
+          <p className="text-muted-ink text-sm">
+            No experiences yet.{" "}
+            <Link
+              href="/admin/experiences/new"
+              className="text-clay underline underline-offset-2"
+            >
+              Create one
+            </Link>{" "}
+            to assign it here.
+          </p>
+        ) : (
+          <Controller
+            control={control}
+            name="experienceIds"
+            render={({ field }) => {
+              const set = new Set(field.value ?? []);
+              const toggle = (id: string) => {
+                const next = new Set(set);
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+                field.onChange([...next]);
+              };
+              return (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {experiences.map((e) => (
+                    <label
+                      key={e.id}
+                      className="border-border hover:bg-paper-2/50 flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={set.has(e.id)}
+                        onChange={() => toggle(e.id)}
+                        className="accent-clay size-4"
+                      />
+                      <span className="text-bark truncate">{e.title}</span>
+                      {!e.isPublished && (
+                        <span className="text-muted-ink ml-auto shrink-0 text-xs">
+                          Draft
+                        </span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              );
+            }}
+          />
+        )}
       </Section>
 
       {/* 5 · Amenities */}

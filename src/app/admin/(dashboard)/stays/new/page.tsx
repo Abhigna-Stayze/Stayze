@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { getAmenityOptions } from "@/services/admin-stay.service";
+import { getExperienceOptions } from "@/services/admin-experience.service";
 import { emptyStayForm } from "@/lib/stay-form";
 import { StayForm } from "@/components/admin/stays/StayForm";
 
@@ -15,7 +16,10 @@ export const metadata: Metadata = {
  * an empty form to the client `StayForm`. It saves as a DRAFT by default.
  */
 export default async function NewStayPage() {
-  const amenities = await getAmenityOptions();
+  const [amenities, experiences] = await Promise.all([
+    getAmenityOptions(),
+    getExperienceOptions(),
+  ]);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -36,6 +40,7 @@ export default async function NewStayPage() {
           mode="create"
           defaultValues={emptyStayForm}
           amenities={amenities}
+          experiences={experiences}
         />
       </div>
     </div>

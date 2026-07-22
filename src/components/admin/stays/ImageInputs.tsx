@@ -11,7 +11,7 @@ type GalleryRef = Ref & {
   width?: number | null;
   height?: number | null;
 };
-type Kind = "cover" | "gallery" | "menu" | "owner-photo";
+type Kind = "cover" | "gallery" | "menu" | "owner-photo" | "experience";
 
 /**
  * A single controlled image field — cover, owner photo, or the menu photo.

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FileText, MessageSquare, CalendarDays } from "lucide-react";
 import type { StayFormValues } from "@/lib/stay-form";
 import type { AmenityOption } from "@/services/admin-stay.service";
+import type { ExperienceLinkOption } from "@/services/admin-experience.service";
 import { StayForm } from "@/components/admin/stays/StayForm";
 import { ReviewsModeration } from "@/components/admin/stays/ReviewsModeration";
 import { AvailabilityCalendar } from "@/components/admin/stays/AvailabilityCalendar";
@@ -20,10 +21,12 @@ export function StayEditorTabs({
   stayId,
   defaultValues,
   amenities,
+  experiences,
 }: {
   stayId: string;
   defaultValues: StayFormValues;
   amenities: AmenityOption[];
+  experiences: ExperienceLinkOption[];
 }) {
   const [tab, setTab] = useState<Tab>("content");
 
@@ -67,6 +70,7 @@ export function StayEditorTabs({
           stayId={stayId}
           defaultValues={defaultValues}
           amenities={amenities}
+          experiences={experiences}
         />
       </div>
       {tab === "reviews" && <ReviewsModeration stayId={stayId} />}

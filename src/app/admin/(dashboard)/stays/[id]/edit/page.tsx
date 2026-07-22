@@ -7,6 +7,7 @@ import {
   getAmenityOptions,
   type AdminStayDetail,
 } from "@/services/admin-stay.service";
+import { getExperienceOptions } from "@/services/admin-experience.service";
 import {
   emptyStayForm,
   type StayFormValues,
@@ -106,12 +107,7 @@ function detailToForm(s: AdminStayDetail): StayFormValues {
       mapsUrl: p.mapsUrl ?? "",
       image: media(p.image),
     })),
-    experiences: s.experiences.map((e) => ({
-      id: e.id,
-      title: e.title,
-      description: e.description ?? "",
-      image: media(e.image),
-    })),
+    experienceIds: s.experienceIds,
     coverImage: hero ? img(hero) : null,
     gallery: rest.map(img),
     menuImageRef: s.menuImageRef
@@ -127,9 +123,10 @@ function detailToForm(s: AdminStayDetail): StayFormValues {
  */
 export default async function EditStayPage({ params }: { params: Params }) {
   const { id } = await params;
-  const [stay, amenities] = await Promise.all([
+  const [stay, amenities, experiences] = await Promise.all([
     getStayForAdmin(id),
     getAmenityOptions(),
+    getExperienceOptions(),
   ]);
   if (!stay) notFound();
 
@@ -164,6 +161,7 @@ export default async function EditStayPage({ params }: { params: Params }) {
           stayId={stay.id}
           defaultValues={detailToForm(stay)}
           amenities={amenities}
+          experiences={experiences}
         />
       </div>
     </div>

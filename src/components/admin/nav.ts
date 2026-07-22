@@ -28,7 +28,12 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard, enabled: true },
   { label: "Stays", href: "/admin/stays", icon: Home, enabled: true },
   { label: "Bookings", icon: CalendarCheck, enabled: false },
-  { label: "Experiences", icon: Compass, enabled: false },
+  {
+    label: "Experiences",
+    href: "/admin/experiences",
+    icon: Compass,
+    enabled: true,
+  },
   { label: "Travel Guides", icon: BookOpen, enabled: false },
   { label: "Media", icon: Images, enabled: false },
   { label: "Settings", icon: Settings, enabled: false },

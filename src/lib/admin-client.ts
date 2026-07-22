@@ -1,4 +1,5 @@
 import type { StayFormValues, StayStatusValue } from "@/lib/stay-form";
+import type { ExperienceFormValues } from "@/lib/experience-form";
 
 /**
  * The browser-side client for the admin REST API.
@@ -81,6 +82,40 @@ export function deleteStay(id: string) {
   });
 }
 
+export function createExperience(values: ExperienceFormValues) {
+  return request<{ id: string; slug: string }>("/api/admin/experiences", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(values),
+  });
+}
+
+export function updateExperience(id: string, values: ExperienceFormValues) {
+  return request<{ id: string; slug: string }>(`/api/admin/experiences/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(values),
+  });
+}
+
+export function setExperiencePublished(id: string, isPublished: boolean) {
+  return request<{ id: string; isPublished: boolean }>(
+    `/api/admin/experiences/${id}/status`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isPublished }),
+    },
+  );
+}
+
+export function deleteExperience(id: string) {
+  return request<{ id: string; deleted: true }>(
+    `/api/admin/experiences/${id}`,
+    { method: "DELETE" },
+  );
+}
+
 export function moderateReview(reviewId: string, isPublished: boolean) {
   return request(`/api/admin/reviews/${reviewId}`, {
     method: "PATCH",
@@ -134,7 +169,7 @@ export type UploadedImage = {
 /** Upload one image and get its stored reference + a preview URL. */
 export async function uploadImage(
   file: File,
-  kind: "cover" | "gallery" | "menu" | "owner-photo",
+  kind: "cover" | "gallery" | "menu" | "owner-photo" | "experience",
 ): Promise<UploadedImage> {
   const dims = await readDimensions(file);
   const form = new FormData();

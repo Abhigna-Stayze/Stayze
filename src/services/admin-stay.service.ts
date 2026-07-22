@@ -72,13 +72,6 @@ export type AdminNearby = {
   mapsUrl: string | null;
   image: (MediaRef & { url: string | null }) | null;
 };
-export type AdminExperience = {
-  id: string;
-  title: string;
-  description: string | null;
-  image: (MediaRef & { url: string | null }) | null;
-};
-
 export type AdminStayDetail = {
   id: string;
   propertyCode: string;
@@ -124,7 +117,8 @@ export type AdminStayDetail = {
   highlights: AdminHighlight[];
   rooms: AdminRoom[];
   nearbyPlaces: AdminNearby[];
-  experiences: AdminExperience[];
+  /** The ids of the managed experiences this stay offers (ticked in the editor). */
+  experienceIds: string[];
   menuImageUrl: string | null;
   menuImageRef: MediaRef | null;
   createdAt: Date;
@@ -296,7 +290,7 @@ export async function getStayForAdmin(
       nearbyPlaces: { orderBy: { sortOrder: "asc" } },
       experiences: {
         orderBy: { sortOrder: "asc" },
-        include: { experience: true },
+        select: { experienceId: true },
       },
     },
   });
@@ -386,12 +380,7 @@ export async function getStayForAdmin(
       mapsUrl: p.mapsUrl,
       image: mediaWithUrl(p.imageBucket, p.imagePath),
     })),
-    experiences: stay.experiences.map((link) => ({
-      id: link.experience.id,
-      title: link.experience.title,
-      description: link.experience.excerpt ?? link.experience.story,
-      image: mediaWithUrl(link.experience.bucket, link.experience.path),
-    })),
+    experienceIds: stay.experiences.map((link) => link.experienceId),
     menuImageUrl: getPublicUrlOrNull({
       bucket: stay.menuImageBucket,
       path: stay.menuImagePath,
@@ -922,79 +911,49 @@ async function replaceNested(
     });
   }
 
-  await syncExperiences(tx, stayId, input.experiences);
+  await syncExperienceLinks(tx, stayId, input.experienceIds);
 }
 
 /**
- * Reconcile the stay's experiences. An item with an `id` updates that shared
- * Experience; a new item creates one. Links (StayExperience) carry the order.
- * Removed experiences are *unlinked*, not deleted — the Experience may be shared
- * with another stay.
+ * Reconcile which experiences this stay offers. Experiences are managed
+ * centrally (the Experience module) — here a stay only *links* to them, in the
+ * ticked order. Added links append at the given index; removed links are
+ * unlinked, never deleted (the Experience may be shared with other stays).
  */
-async function syncExperiences(
+async function syncExperienceLinks(
   tx: Tx,
   stayId: string,
-  items: StayFormValues["experiences"],
+  experienceIds: string[],
 ): Promise<void> {
+  const wanted = [...new Set(experienceIds)];
+  const wantedSet = new Set(wanted);
+
   const existing = await tx.stayExperience.findMany({
     where: { stayId },
     select: { experienceId: true },
   });
-  const keep = new Set<string>();
-
-  for (let i = 0; i < items.length; i++) {
-    const it = items[i];
-    const data = {
-      title: it.title.trim(),
-      excerpt: emptyToNull(it.description),
-      story: it.description?.trim() || it.title.trim(),
-      bucket: it.image?.bucket ?? null,
-      path: it.image?.path ?? null,
-      isPublished: true,
-    };
-
-    let experienceId: string;
-    if (it.id) {
-      await tx.experience.update({ where: { id: it.id }, data });
-      experienceId = it.id;
-    } else {
-      const slug = await uniqueExperienceSlug(tx, it.title);
-      const created = await tx.experience.create({
-        data: { ...data, slug },
-        select: { id: true },
-      });
-      experienceId = created.id;
-    }
-    keep.add(experienceId);
-
-    await tx.stayExperience.upsert({
-      where: { stayId_experienceId: { stayId, experienceId } },
-      create: { stayId, experienceId, sortOrder: i },
-      update: { sortOrder: i },
-    });
-  }
+  const have = new Set(existing.map((e) => e.experienceId));
 
   const stale = existing
     .map((e) => e.experienceId)
-    .filter((eid) => !keep.has(eid));
+    .filter((eid) => !wantedSet.has(eid));
   if (stale.length > 0) {
     await tx.stayExperience.deleteMany({
       where: { stayId, experienceId: { in: stale } },
     });
   }
-}
 
-async function uniqueExperienceSlug(tx: Tx, title: string): Promise<string> {
-  const base = slugify(title);
-  let slug = base;
-  let n = 2;
-  for (;;) {
-    const clash = await tx.experience.findUnique({
-      where: { slug },
-      select: { id: true },
-    });
-    if (!clash) break;
-    slug = `${base}-${n++}`;
+  for (let i = 0; i < wanted.length; i++) {
+    const experienceId = wanted[i];
+    if (have.has(experienceId)) {
+      await tx.stayExperience.update({
+        where: { stayId_experienceId: { stayId, experienceId } },
+        data: { sortOrder: i },
+      });
+    } else {
+      await tx.stayExperience.create({
+        data: { stayId, experienceId, sortOrder: i },
+      });
+    }
   }
-  return slug;
 }

@@ -100,18 +100,6 @@ export const nearbyPlaceSchema = z.object({
 });
 export type NearbyItem = z.infer<typeof nearbyPlaceSchema>;
 
-/**
- * A stay experience. `id` links to an existing (shared) Experience; a new item
- * has no id and the service creates one. Editing here edits the shared entity.
- */
-export const experienceSchema = z.object({
-  id: z.string().optional().nullable(),
-  title: z.string().trim().min(1, "Title is required.").max(120),
-  description: z.string().trim().max(1000).optional().nullable(),
-  image: mediaRefSchema.nullish(),
-});
-export type ExperienceItem = z.infer<typeof experienceSchema>;
-
 /** A phone number — lenient (owners give many formats), digits-ish, 7–20 chars. */
 const phone = z
   .string()
@@ -168,7 +156,9 @@ export const stayFormSchema = z.object({
   highlights: z.array(highlightSchema).default([]),
   rooms: z.array(roomSchema).default([]),
   nearbyPlaces: z.array(nearbyPlaceSchema).default([]),
-  experiences: z.array(experienceSchema).default([]),
+  // Experiences are managed centrally (the Experience module); a stay only
+  // *ticks* which managed experiences it offers. These are Experience ids.
+  experienceIds: z.array(z.string()).default([]),
 
   // --- Section 3 · Amenities ---
   amenityIds: z.array(z.string()).default([]),
@@ -227,7 +217,7 @@ export const emptyStayForm: StayFormValues = {
   highlights: [],
   rooms: [],
   nearbyPlaces: [],
-  experiences: [],
+  experienceIds: [],
   amenityIds: [],
   slug: "",
   status: "DRAFT",
