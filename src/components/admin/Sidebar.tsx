@@ -25,7 +25,14 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-3" aria-label="Admin">
         {ADMIN_NAV.map((item) => {
-          const active = item.enabled && item.href === pathname;
+          // Dashboard matches exactly; a section (e.g. /admin/stays) also stays
+          // lit on its sub-pages (/admin/stays/new, /admin/stays/[id]/edit).
+          const active =
+            item.enabled && item.href
+              ? item.href === "/admin"
+                ? pathname === "/admin"
+                : pathname === item.href || pathname.startsWith(item.href + "/")
+              : false;
 
           if (!item.enabled) {
             return (

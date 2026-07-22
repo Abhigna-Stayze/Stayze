@@ -38,6 +38,7 @@ enum Verification {
 enum StayStatus {
   DRAFT
   PUBLISHED
+  HIDDEN /// Was live, taken down — not public, not a fresh draft (Phase 13.2)
   ARCHIVED
 }
 
@@ -118,6 +119,7 @@ model Stay {
 
   area               String /// "Mallandur", "Kanathi"
   addressLine        String? /// Internal / shared after booking
+  mapsUrl            String? /// Google Maps link to the property (Phase 13.2)
   latitude           Decimal? @db.Decimal(9, 6)
   longitude          Decimal? @db.Decimal(9, 6)
   distanceFromTownKm Decimal? @db.Decimal(6, 2) /// Shown as "22 km from Chikmagalur"
@@ -139,6 +141,11 @@ model Stay {
 
   caretakerName  String? /// "Ramu" — named, never "staff"
   caretakerPhone String? /// PRIVATE. Only revealed on the Trip Timeline after booking
+
+  /// Food menu, stored as a single image (a photo of the menu). Shown on the
+  /// stay detail page. Bucket + path only, like every other media reference.
+  menuImageBucket String? @default("stays")
+  menuImagePath   String?
 
   /// Denormalised from Review. Nothing in Postgres maintains these — the review
   /// service recomputes them on every publish, edit, unpublish and delete.
@@ -172,6 +179,11 @@ model Stay {
   bookingRequests BookingRequest[]
   guides          GuideStay[]
 
+  /// Soft delete (Phase 13.2). A deleted stay keeps its row but leaves the
+  /// admin list and, because delete also flips status off PUBLISHED, the public
+  /// site. Non-null means deleted.
+  deletedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -179,6 +191,7 @@ model Stay {
   @@index([status])
   @@index([isFeatured])
   @@index([area])
+  @@index([deletedAt])
 }
 
 /// The host. Public profile is shown on Stay Detail ("Meet your host").

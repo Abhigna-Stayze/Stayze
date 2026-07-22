@@ -26,7 +26,7 @@ export type AdminNavItem = {
 
 export const ADMIN_NAV: AdminNavItem[] = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard, enabled: true },
-  { label: "Stays", icon: Home, enabled: false },
+  { label: "Stays", href: "/admin/stays", icon: Home, enabled: true },
   { label: "Bookings", icon: CalendarCheck, enabled: false },
   { label: "Experiences", icon: Compass, enabled: false },
   { label: "Travel Guides", icon: BookOpen, enabled: false },

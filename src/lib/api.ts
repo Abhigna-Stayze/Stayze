@@ -5,6 +5,7 @@ import { BookingError } from "@/services/booking.service";
 import { ExperienceError } from "@/services/experience.service";
 import { MediaError } from "@/services/media.service";
 import { ReviewError } from "@/services/review.service";
+import { StayAdminError } from "@/services/admin-stay.service";
 import { StorageConflictError, StorageError } from "@/lib/storage";
 import { RateLimitError } from "@/lib/rate-limit";
 import { env } from "@/lib/env";
@@ -82,9 +83,14 @@ function toErrorResponse(error: unknown): NextResponse<ApiFailure> {
     });
   }
 
-  // 401 — a write endpoint reached without the shared secret.
+  // 401 — a write endpoint reached without the shared secret / a session.
   if (error instanceof UnauthorizedError) {
     return fail(error.message, 401);
+  }
+
+  // 403 — authenticated, but not permitted (e.g. not a SUPER_ADMIN).
+  if (error instanceof ForbiddenError) {
+    return fail(error.message, 403);
   }
 
   // 400 — the request never became data (bad JSON, unusable parameter).
@@ -104,7 +110,8 @@ function toErrorResponse(error: unknown): NextResponse<ApiFailure> {
     error instanceof BookingError ||
     error instanceof MediaError ||
     error instanceof ReviewError ||
-    error instanceof ExperienceError
+    error instanceof ExperienceError ||
+    error instanceof StayAdminError
   ) {
     return fail(error.message, 400);
   }
@@ -260,5 +267,13 @@ export class UnauthorizedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "UnauthorizedError";
+  }
+}
+
+/** Authenticated but not permitted — mapped to 403. */
+export class ForbiddenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ForbiddenError";
   }
 }
