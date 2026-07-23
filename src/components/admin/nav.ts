@@ -35,6 +35,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     enabled: true,
   },
   { label: "Travel Guides", icon: BookOpen, enabled: false },
-  { label: "Media", icon: Images, enabled: false },
-  { label: "Settings", icon: Settings, enabled: false },
+  { label: "Media", href: "/admin/media", icon: Images, enabled: true },
+  { label: "Settings", href: "/admin/settings", icon: Settings, enabled: true },
 ];

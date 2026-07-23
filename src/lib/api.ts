@@ -7,6 +7,8 @@ import { MediaError } from "@/services/media.service";
 import { ReviewError } from "@/services/review.service";
 import { StayAdminError } from "@/services/admin-stay.service";
 import { ExperienceAdminError } from "@/services/admin-experience.service";
+import { MediaAdminError } from "@/services/admin-media.service";
+import { SettingsAdminError } from "@/services/admin-settings.service";
 import { StorageConflictError, StorageError } from "@/lib/storage";
 import { RateLimitError } from "@/lib/rate-limit";
 import { env } from "@/lib/env";
@@ -113,7 +115,9 @@ function toErrorResponse(error: unknown): NextResponse<ApiFailure> {
     error instanceof ReviewError ||
     error instanceof ExperienceError ||
     error instanceof StayAdminError ||
-    error instanceof ExperienceAdminError
+    error instanceof ExperienceAdminError ||
+    error instanceof MediaAdminError ||
+    error instanceof SettingsAdminError
   ) {
     return fail(error.message, 400);
   }

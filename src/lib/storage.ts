@@ -273,6 +273,91 @@ export async function moveFile(
 }
 
 // ---------------------------------------------------------------------------
+// Listing — what is actually IN a bucket
+// ---------------------------------------------------------------------------
+
+/** One stored object, as Storage knows it (Postgres may know nothing about it). */
+export type StorageObject = {
+  bucket: string;
+  /** Full path inside the bucket, e.g. "property-001/rooms/estate.jpg". */
+  path: string;
+  /** Bytes. Null when Storage reports no metadata. */
+  size: number | null;
+  mimeType: string | null;
+  /** When the object was created — the closest thing to an "upload date". */
+  createdAt: Date | null;
+};
+
+/** How deep the walk will go, and how many objects it will return per bucket. */
+const LIST_PAGE = 100;
+const MAX_DEPTH = 6;
+const MAX_OBJECTS_PER_BUCKET = 2000;
+
+/**
+ * Every object in a bucket, walked recursively.
+ *
+ * Supabase's `.list()` is **one folder at a time** and returns folders as
+ * entries with no `id`, so a flat listing does not exist — this walks. Used by
+ * the admin Media Library, which is a DERIVED index: there is no media table in
+ * Schema v1.1, so "what exists" comes from Storage and "what uses it" comes from
+ * the referencing rows.
+ *
+ * Bounded on purpose (depth, page size, total): this runs behind an admin page,
+ * and an unbounded walk of a bucket someone filled with 100k objects would hang
+ * it. Hitting the cap logs, it does not throw — a partial library beats none.
+ */
+export async function listBucket(bucket: string): Promise<StorageObject[]> {
+  const out: StorageObject[] = [];
+
+  const walk = async (prefix: string, depth: number): Promise<void> => {
+    if (depth > MAX_DEPTH || out.length >= MAX_OBJECTS_PER_BUCKET) return;
+
+    for (let offset = 0; ; offset += LIST_PAGE) {
+      const { data, error } = await getSupabaseAdmin()
+        .storage.from(bucket)
+        .list(prefix, { limit: LIST_PAGE, offset });
+
+      if (error) {
+        throw new StorageError(`list ${bucket}/${prefix}`, error.message);
+      }
+      const entries = data ?? [];
+      if (entries.length === 0) return;
+
+      for (const entry of entries) {
+        const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+
+        // Supabase marks folders by returning them with a null id.
+        if (entry.id === null || entry.id === undefined) {
+          await walk(path, depth + 1);
+          continue;
+        }
+        if (out.length >= MAX_OBJECTS_PER_BUCKET) {
+          console.warn(
+            `[storage] ${bucket}: hit the ${MAX_OBJECTS_PER_BUCKET}-object cap; listing truncated.`,
+          );
+          return;
+        }
+
+        const meta = entry.metadata as
+          { size?: number; mimetype?: string } | null | undefined;
+        out.push({
+          bucket,
+          path,
+          size: typeof meta?.size === "number" ? meta.size : null,
+          mimeType: meta?.mimetype ?? null,
+          createdAt: entry.created_at ? new Date(entry.created_at) : null,
+        });
+      }
+
+      if (entries.length < LIST_PAGE) return;
+    }
+  };
+
+  await walk("", 0);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Path helpers — one place that knows the layout, so it stays consistent
 // ---------------------------------------------------------------------------
 

@@ -1,5 +1,6 @@
 import type { StayFormValues, StayStatusValue } from "@/lib/stay-form";
 import type { ExperienceFormValues } from "@/lib/experience-form";
+import type { SettingsFormValues } from "@/lib/settings-form";
 
 /**
  * The browser-side client for the admin REST API.
@@ -155,6 +156,58 @@ export function mutateAvailability(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+}
+
+export function updateSiteSettings(values: SettingsFormValues) {
+  return request("/api/admin/settings", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(values),
+  });
+}
+
+export function updateMediaMeta(body: {
+  bucket: string;
+  path: string;
+  altText?: string | null;
+  caption?: string | null;
+}) {
+  return request("/api/admin/media", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteMedia(bucket: string, path: string, force = false) {
+  return request<{ deleted: true; detached: number }>("/api/admin/media", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ bucket, path, force }),
+  });
+}
+
+/** Upload into the library. It lands unused until an editor attaches it. */
+export function uploadToLibrary(file: File, bucket: string) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("bucket", bucket);
+  return request<{ bucket: string; path: string }>("/api/admin/media", {
+    method: "POST",
+    body: form,
+  });
+}
+
+/** Swap the bytes behind an object; every reference is repointed. */
+export function replaceMedia(file: File, bucket: string, path: string) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("bucket", bucket);
+  form.append("path", path);
+  return request<{ bucket: string; path: string }>("/api/admin/media/replace", {
+    method: "POST",
+    body: form,
   });
 }
 
